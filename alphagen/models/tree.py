@@ -63,10 +63,10 @@ class AlphaTreeBuilder:
             n_args = token.operator.category.n_args
             node = OperatorTreeNode(token)
             for _ in range(n_args):
-                node.append_child(self.stack.pop())  # Last argument first in
+                node.append_child(self.stack.pop())     # Last argument first in
             self.stack.append(node)
         else:
-            self.stack.append(ValueTreeNode(token))
+            self.stack.append(ValueTreeNode(token))     # type: ignore
 
     def is_valid(self) -> bool:
         return len(self.stack) == 1 and self.stack[0].is_featured

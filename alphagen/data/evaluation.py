@@ -5,8 +5,8 @@ from qlib.data.dataset.loader import QlibDataLoader
 
 
 def load_expr(expr: str, instrument: str, start_time: str, end_time: str) -> pd.DataFrame:
-    return QlibDataLoader(config={"feature": [expr]}) \
-        .load(instrument, start_time, end_time)
+    return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
+            .load(instrument, start_time, end_time))
 
 
 def correlation(joined: pd.DataFrame):
@@ -17,7 +17,7 @@ class Evaluation:
     instrument: str
     start_time: str
     end_time: str
-    target: pd.DataFrame
+    target: pd.Series
 
     def __init__(self, instrument: str, start_time: str, end_time: str):
         self.instrument = instrument
@@ -33,7 +33,7 @@ class Evaluation:
         # self._load(expr).set_axis(labels=["factor"], axis=1)
         factor = self._load(expr).set_axis(labels=['factor'], axis=1)
         joined = factor.join(self.target).groupby('datetime')
-        return joined.apply(correlation).mean()
+        return joined.apply(correlation).mean()             # type: ignore
 
 
 if __name__ == '__main__':
