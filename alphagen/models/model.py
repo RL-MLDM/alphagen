@@ -1,17 +1,17 @@
-from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, List
 import math
 
 import torch
 from torch import nn, Tensor
 from torch.distributions import Categorical, Normal
+from alphagen.data.expression import Operators
 from alphagen.models.tokens import *
 
 
 class TokenEmbedding(nn.Module):
     def __init__(self,
                  d_model: int,
-                 operators: List[OperatorType],
+                 operators: List[Type[Operator]],
                  delta_time_range: Tuple[int, int],
                  device: torch.device):
         super().__init__()
@@ -22,8 +22,8 @@ class TokenEmbedding(nn.Module):
 
         self._const_linear = nn.Linear(1, d_model, device=device)
         dt_count = delta_time_range[1] - delta_time_range[0]
-        total_emb = (int(SequenceIndicatorType.ENUM_SIZE) + int(FeatureType.ENUM_SIZE) +
-                     int(OperatorType.ENUM_SIZE) + dt_count)
+        total_emb = (len(SequenceIndicatorType) + len(FeatureType) +
+                     len(Operators) + dt_count)
         self._emb = nn.Embedding(total_emb, d_model, device=device)
 
     def forward(self, tokens: List[Token]) -> Tensor:
@@ -32,9 +32,9 @@ class TokenEmbedding(nn.Module):
         emb_idx: List[int] = []
         emb_type_idx: List[int] = []
 
-        feat_offset = int(SequenceIndicatorType.ENUM_SIZE)
-        op_offset = feat_offset + int(FeatureType.ENUM_SIZE)
-        dt_offset = op_offset + int(OperatorType.ENUM_SIZE)
+        feat_offset = len(SequenceIndicatorType)
+        op_offset = feat_offset + len(FeatureType)
+        dt_offset = op_offset + len(Operators)
 
         for i, tok in enumerate(tokens):
             if isinstance(tok, ConstantToken):
@@ -47,7 +47,7 @@ class TokenEmbedding(nn.Module):
             elif isinstance(tok, FeatureToken):
                 emb_type_idx.append(int(tok.feature) + feat_offset)
             elif isinstance(tok, OperatorToken):
-                emb_type_idx.append(int(tok.operator) + op_offset)
+                emb_type_idx.append(Operators.index(tok.operator) + op_offset)
             elif isinstance(tok, DeltaTimeToken):
                 emb_type_idx.append(int(tok.delta_time) - self._delta_time_range[0] + dt_offset)
             else:
@@ -87,7 +87,7 @@ class ExpressionGenerator(nn.Module):
                  n_head: int,
                  d_ffn: int,
                  dropout: float,
-                 operators: List[OperatorType],
+                 operators: List[Type[Operator]],
                  delta_time_range: Tuple[int, int],
                  device: torch.device):
         super().__init__()
@@ -116,7 +116,7 @@ class ExpressionGenerator(nn.Module):
         )
         self._op_feat_const_linear = nn.Linear(d_model, 3, device=device)
         self._op_linear = nn.Linear(d_model, len(operators), device=device)
-        self._feat_linear = nn.Linear(d_model, int(FeatureType.ENUM_SIZE), device=device)
+        self._feat_linear = nn.Linear(d_model, len(FeatureType), device=device)
         self._const_linear = nn.Linear(d_model, 2, device=device)
         self._dt_linear = nn.Linear(d_model, delta_time_range[1] - delta_time_range[0],
                                     device=device)

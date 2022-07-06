@@ -6,6 +6,7 @@ from torch.distributions import Categorical, Normal
 
 from alphagen.models.model import TokenEmbedding, PositionalEncoding
 from alphagen.models.tokens import *
+from alphagen.data.expression import *
 
 
 class Policy:
@@ -16,7 +17,7 @@ class Policy:
         n_head: int,
         d_ffn: int,
         dropout: float,
-        operators: List[OperatorType],
+        operators: List[Type[Operator]],
         delta_time_range: Tuple[int, int],
         device: torch.device
     ):
@@ -84,7 +85,7 @@ class Decoder(nn.Module):
     def __init__(
         self,
         d_model: int,
-        operators: List[OperatorType],
+        operators: List[Type[Operator]],
         delta_time_range: Tuple[int, int],
         device: torch.device
     ):
@@ -95,7 +96,7 @@ class Decoder(nn.Module):
         self._decision_linear = nn.Linear(d_model, 5, device=device)
 
         self._op_linear = nn.Linear(d_model, len(operators), device=device)
-        self._feat_linear = nn.Linear(d_model, int(FeatureType.ENUM_SIZE), device=device)
+        self._feat_linear = nn.Linear(d_model, len(FeatureType), device=device)
         self._const_linear = nn.Linear(d_model, 2, device=device)
         self._dt_linear = nn.Linear(
             d_model,
@@ -112,10 +113,10 @@ class Decoder(nn.Module):
         idx = select_dist.sample()
         select_log_prob = select_dist.log_prob(idx)
         idx = int(idx)
-        if idx == 0:  # Operators
+        if idx == 0:    # Operators
             logits = self._op_linear(res)
             for i, op in enumerate(self._operators):
-                if not info['op'][op.category]:
+                if not info['op'][op.category_type()]:
                     logits[i] = -1e10
             dist = Categorical(logits=logits)
             idx = dist.sample()
@@ -139,7 +140,7 @@ class Decoder(nn.Module):
             log_prob = dist.log_prob(idx)
             dt = self._dt_range[0] + int(idx)
             return DeltaTimeToken(dt), log_prob
-        else:  # End
+        else:           # End
             return SequenceIndicatorToken(SequenceIndicatorType.SEP), select_log_prob
 
 
@@ -150,7 +151,7 @@ if __name__ == '__main__':
         n_head=8,
         d_ffn=2048,
         dropout=0.1,
-        operators=[OperatorType.ADD, OperatorType.SUB, OperatorType.REF, OperatorType.ABS],
+        operators=[Add, Sub, Ref, Abs],
         delta_time_range=(1, 31),
         device=torch.device("cuda:0")
     )
@@ -174,6 +175,6 @@ if __name__ == '__main__':
             state, reward, done, info = env.step(action)
             # print(f'next_state: {state}, reward: {reward}, done: {done}')
             if done:
-                seq = str(env.builder.get_tree()) if env.builder.is_valid() else 'Invalid'
+                seq = str(env._builder.get_tree()) if env._builder.is_valid() else 'Invalid'
                 print(f'seq: {seq}, reward: {reward}')
                 break
