@@ -46,7 +46,7 @@ class Evaluation:
         target[nan_mask] = torch.nan
         n = (~nan_mask).sum(dim=1)
 
-        def rank_data(data: Tensor) -> Tensor:
+        def rank_data(data: torch.Tensor) -> torch.Tensor:
             rank = data.argsort().argsort().float()         # [d, s]
             eq = data[:, None] == data[:, :, None]          # [d, s, s]
             eq = eq / eq.sum(dim=2, keepdim=True)           # [d, s, s]

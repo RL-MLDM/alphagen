@@ -4,7 +4,7 @@ from typing import List, Type, Union
 import torch
 from torch import Tensor
 
-from .stock_data import StockData, FeatureType
+from alphagen.data.stock_data import StockData, FeatureType
 
 
 class Expression(metaclass=ABCMeta):
@@ -50,7 +50,7 @@ class Expression(metaclass=ABCMeta):
     def __abs__(self) -> "Abs": return Abs(self)
 
     @property
-    def is_featured(self): return not isinstance(self, Constant)
+    def is_featured(self): return not isinstance(self, (Constant, DeltaTime))
 
 
 class Feature(Expression):

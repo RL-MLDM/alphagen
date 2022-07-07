@@ -109,7 +109,7 @@ if __name__ == '__main__':
     tokens = [
         FeatureToken(FeatureType.LOW),
         OperatorToken(Abs),
-        DeltaTimeToken(-10),
+        DeltaTimeToken(10),
         OperatorToken(Ref),
         FeatureToken(FeatureType.HIGH),
         FeatureToken(FeatureType.CLOSE),

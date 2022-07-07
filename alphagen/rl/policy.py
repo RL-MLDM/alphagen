@@ -144,7 +144,7 @@ class Decoder(nn.Module):
             return SequenceIndicatorToken(SequenceIndicatorType.SEP), select_log_prob
 
 
-if __name__ == '__main__':
+def main():
     policy = Policy(
         n_encoder_layers=6,
         d_model=512,
@@ -178,3 +178,7 @@ if __name__ == '__main__':
                 seq = str(env._builder.get_tree()) if env._builder.is_valid() else 'Invalid'
                 print(f'seq: {seq}, reward: {reward}')
                 break
+
+
+if __name__ == '__main__':
+    main()

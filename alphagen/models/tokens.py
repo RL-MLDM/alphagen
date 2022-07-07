@@ -1,7 +1,7 @@
 from enum import IntEnum
 from typing import Type
-from ..data.stock_data import FeatureType
-from ..data.expression import Operator
+from alphagen.data.stock_data import FeatureType
+from alphagen.data.expression import Operator
 
 
 class SequenceIndicatorType(IntEnum):
