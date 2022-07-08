@@ -243,3 +243,30 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
         rec.add_record(TotalTime=time.time() - start_time)
         rec.log_stats()
         rec.reset()
+
+
+if __name__ == "__main__":
+    from alphagen.utils.random import reseed_everything
+    from alphagen.data.expression import *
+
+    reseed_everything(0)
+
+    device = torch.device("cuda:0")
+    env = AlphaEnvCore("csi100", "2019-01-01", "2020-12-31", device)
+    policy = Policy(
+        n_encoder_layers=4,
+        d_model=256,
+        n_head=8,
+        d_ffn=1024,
+        dropout=0.1,
+        operators=[Add, Sub, Mul, Div, Ref, Abs, EMA, Mean, Std],
+        delta_time_range=(1, 31),
+        device=device
+    )
+    ppo(
+        env, policy, seed=0,
+        steps_per_epoch=500, epochs=200,
+        pi_lr=5e-6, vf_lr=5e-6, entropy_weight=0.01,
+        train_pi_iters=10, train_v_iters=10,
+        save_freq=4
+    )
