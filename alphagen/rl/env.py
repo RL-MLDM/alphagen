@@ -9,7 +9,7 @@ from alphagen.data.expression import *
 from alphagen.models.tree import AlphaTreeBuilder
 from alphagen.utils.random import reseed_everything
 
-MAX_TOKEN_LENGTH = 20
+MAX_TOKEN_LENGTH = 15
 
 
 class AlphaEnvCore(gym.Env):

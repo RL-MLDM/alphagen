@@ -42,12 +42,13 @@ class _Recorder:
         self._state = {}
 
     def log_stats(self) -> None:
+        max_k_width = max(len(k) for k in self._state.keys())
         for k, v in self._state.items():
             if v.count == 1:
-                print(f"{k}: {v.sum}")
+                print(f"{k:{max_k_width}}: {v.sum:10.4f}")
             else:
-                print(f"{k}: mean = {v.sum / v.count:.4}, "
-                      f"range = [{v.min:.4}, {v.max:.4}], "
+                print(f"{k:{max_k_width}}: mean = {v.sum / v.count:10.4f}, "
+                      f"range = [{v.min:10.4f}, {v.max:10.4f}], "
                       f"total = {v.count}")
 
 
@@ -109,7 +110,8 @@ class _Buffer:
         self._ptr, self._path_start_idx = 0, 0
         return _EpochData(
             self._observations, self._actions,
-            self._returns, _normalize(self._advantages),
+            # self._returns, _normalize(self._advantages),
+            self._returns, self._advantages,
             self._log_probs
         )
 
@@ -117,6 +119,7 @@ class _Buffer:
 def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
         steps_per_epoch: int = 4000, epochs: int = 50,
         gamma: float = 0.99, clip_ratio: float = 0.2,
+        entropy_weight: Optional[float] = None,
         pi_lr: float = 3e-4, vf_lr: float = 1e-3,
         train_pi_iters: int = 80, train_v_iters: int = 80,
         lambda_: float = 0.97, max_ep_len: int = 1000, save_freq: int = 10):
@@ -132,15 +135,21 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
 
         # Policy loss
         log_probs = []
+        entropies = []
         for i, o in enumerate(obs):
-            _, logp = policy.get_action(*o, act[i])
+            _, logp, entropy = policy.get_action(*o, act[i])
             log_probs.append(logp)
+            entropies.append(entropy)
         logp = torch.stack(log_probs)
+        entropies = torch.stack(entropies)
 
         ratio = torch.exp(logp - logp_old)
         clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-        loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+        target = torch.min(ratio * adv, clip_adv)
+        if entropy_weight is not None:
+            target = target + entropy_weight * entropies
 
+        loss_pi = -target.mean()
         return loss_pi
 
     # Set up function for computing value loss
@@ -169,7 +178,7 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
             pi_optimizer.zero_grad()
             loss_pi = compute_loss_pi(data)
             loss_pi.backward()
-            clip_grad_value_(policy.policy_parameters(), 2.0)
+            clip_grad_value_(policy.policy_parameters(), 1.0)
             pi_optimizer.step()
 
         # Value function learning
@@ -177,7 +186,7 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
             vf_optimizer.zero_grad()
             loss_v = compute_loss_v(data)
             loss_v.backward()
-            clip_grad_value_(policy.value_parameters(), 2.0)
+            clip_grad_value_(policy.value_parameters(), 1.0)
             vf_optimizer.step()
 
         # Log changes from update
@@ -196,14 +205,14 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
         print(f"[Epoch {epoch}]")
 
         for t in tqdm(range(steps_per_epoch), desc="Simulation"):
-            action, logp, value = policy.get_action_value(*obs)
+            action, logp, entropy, value = policy.get_action_value(*obs)
             next_obs, reward, done, info = env.step(action)
             eps_ret += reward
             eps_len += 1
 
             # save and log
             buf.store(obs, action, reward, value.item(), logp.item())
-            rec.add_record(VVals=value)
+            rec.add_record(VVals=value, Entropy=entropy.item())
 
             # Update obs (critical!)
             obs = next_obs, info
@@ -215,7 +224,7 @@ def ppo(env: AlphaEnvCore, policy: Policy, seed: Optional[int] = None,
             if terminal or epoch_ended:
                 # if trajectory didn't reach terminal state, bootstrap value target
                 if timeout or epoch_ended:
-                    action, logp, value = policy.get_action_value(*obs)
+                    action, logp, entropy, value = policy.get_action_value(*obs)
                 else:
                     value = 0
                 buf.finish_path(float(value))

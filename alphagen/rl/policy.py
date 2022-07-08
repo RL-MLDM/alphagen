@@ -1,8 +1,8 @@
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable
 
 import torch
 from torch import nn, Tensor
-from torch.distributions import Categorical, Normal
+from torch.distributions import Categorical, Normal, Distribution
 
 from alphagen.models.model import TokenEmbedding, PositionalEncoding
 from alphagen.models.tokens import *
@@ -44,18 +44,18 @@ class Policy:
         return self.decoder(state).mean(dim=0).reshape(-1)
 
     def get_action(self, state: List[Token], info: dict,
-                   action: Optional[Token] = None) -> Tuple[Token, Tensor]:
+                   action: Optional[Token] = None) -> Tuple[Token, Tensor, Tensor]:
         return self.policy_net(self._decode_flatten(state), info, action)
 
     def get_value(self, state: List[Token], info: dict) -> Tensor:
         return self.value_net(self._decode_flatten(state), info)
 
     def get_action_value(self, state: List[Token], info: dict,
-                         action: Optional[Token] = None) -> Tuple[Token, Tensor, Tensor]:
+                         action: Optional[Token] = None) -> Tuple[Token, Tensor, Tensor, Tensor]:
         repr = self._decode_flatten(state)
-        act_logp: Tuple[Token, Tensor] = self.policy_net(repr, info, action)
+        act_logp_entropy: Tuple[Token, Tensor, Tensor] = self.policy_net(repr, info, action)
         value = self.value_net(repr, info)
-        return *act_logp, value
+        return *act_logp_entropy, value
 
     def decode(self, state: List[Token]):
         return self.decoder(state)
@@ -121,6 +121,9 @@ class Decoder(nn.Module):
         return res.squeeze(1)
 
 
+SampleFunc = Callable[[Distribution, Optional[Token]], Tuple[Token, Tensor]]
+
+
 class PolicyNet(nn.Module):
     def __init__(
         self,
@@ -148,7 +151,7 @@ class PolicyNet(nn.Module):
 
     def _tensor(self, value) -> Tensor: return torch.tensor(value, device=self._device)
 
-    def _sample_token_category(self, dist: Categorical, action: Optional[Token]) -> Tuple[int, Tensor]:
+    def _sample_token_category(self, dist: Distribution, action: Optional[Token]) -> Tuple[int, Tensor]:
         if action is None:
             idx = dist.sample()
         elif isinstance(action, OperatorToken):
@@ -166,7 +169,7 @@ class PolicyNet(nn.Module):
 
         return int(idx), dist.log_prob(idx)
 
-    def _sample_operator(self, dist: Categorical, action: Optional[Token]) -> Tuple[Token, Tensor]:
+    def _sample_operator(self, dist: Distribution, action: Optional[Token]) -> Tuple[Token, Tensor]:
         if action is None:
             idx = dist.sample()
             action = OperatorToken(self._operators[int(idx)])
@@ -175,7 +178,7 @@ class PolicyNet(nn.Module):
             idx = self._tensor(self._operators.index(action.operator))
         return action, dist.log_prob(idx)
 
-    def _sample_feature(self, dist: Categorical, action: Optional[Token]) -> Tuple[Token, Tensor]:
+    def _sample_feature(self, dist: Distribution, action: Optional[Token]) -> Tuple[Token, Tensor]:
         if action is None:
             idx = dist.sample()
             action = FeatureToken(FeatureType(int(idx)))
@@ -184,7 +187,7 @@ class PolicyNet(nn.Module):
             idx = self._tensor(int(action.feature))
         return action, dist.log_prob(idx)
 
-    def _sample_constant(self, dist: Normal, action: Optional[Token]) -> Tuple[Token, Tensor]:
+    def _sample_constant(self, dist: Distribution, action: Optional[Token]) -> Tuple[Token, Tensor]:
         if action is None:
             z = dist.sample()
             action = ConstantToken(float(z))
@@ -193,7 +196,7 @@ class PolicyNet(nn.Module):
             z = self._tensor(action.constant)
         return action, dist.log_prob(z)
 
-    def _sample_dt(self, dist: Categorical, action: Optional[Token]) -> Tuple[Token, Tensor]:
+    def _sample_dt(self, dist: Distribution, action: Optional[Token]) -> Tuple[Token, Tensor]:
         if action is None:
             idx = dist.sample()
             action = DeltaTimeToken(int(idx) + self._dt_range[0])
@@ -203,7 +206,7 @@ class PolicyNet(nn.Module):
         return action, dist.log_prob(idx)
 
     def forward(self, res: Tensor, info: dict,
-                action: Optional[Token] = None) -> Tuple[Token, Tensor]:
+                action: Optional[Token] = None) -> Tuple[Token, Tensor, Tensor]:
         logits = self._decision_linear(res)
         for i in range(5):
             if not info["select"][i]:
@@ -211,34 +214,38 @@ class PolicyNet(nn.Module):
         select_dist = Categorical(logits=logits)
         idx, select_log_prob = self._sample_token_category(select_dist, action)
 
-        if idx == 0:    # Operators
-            logits = self._op_linear(res)
-            for i, op in enumerate(self._operators):
-                if not info["op"][op.category_type()]:
-                    logits[i] = -1e10
-            dist = Categorical(logits=logits)
-            token, logp = self._sample_operator(dist, action)
-            return token, select_log_prob + logp
+        select_entropy: Tensor = select_dist.entropy()
+        choices: List[Tuple[SampleFunc, Distribution]] = []
 
-        elif idx == 1:  # Features
-            dist = Categorical(logits=self._feat_linear(res))
-            token, logp = self._sample_feature(dist, action)
-            return token, select_log_prob + logp
+        # Operators
+        logits = self._op_linear(res)
+        for i, op in enumerate(self._operators):
+            if not info["op"][op.category_type()]:
+                logits[i] = -1e10
+        choices.append((self._sample_operator, Categorical(logits=logits)))
 
-        elif idx == 2:  # Constants
-            affine: Tensor = self._const_linear(res)
-            mu, sigma = affine[0], affine[1].exp()
-            dist = Normal(mu, sigma)
-            token, logp = self._sample_constant(dist, action)
-            return token, select_log_prob + logp
+        # Features
+        choices.append((self._sample_feature, Categorical(logits=self._feat_linear(res))))
 
-        elif idx == 3:  # Date Delta
-            dist = Categorical(logits=self._dt_linear(res))
-            token, logp = self._sample_dt(dist, action)
-            return token, select_log_prob + logp
+        # Constants
+        affine: Tensor = self._const_linear(res)
+        mu, sigma = affine[0], affine[1].exp()
+        choices.append((self._sample_constant, Normal(mu, sigma)))
 
-        else:           # End
-            return SEP_TOKEN, select_log_prob
+        # Time delta
+        choices.append((self._sample_dt, Categorical(logits=self._dt_linear(res))))
+
+        select_probs: Tensor = select_dist.probs    # type: ignore
+        total_entropy = (select_entropy +
+                         torch.stack([choice[1].entropy() for choice in choices])
+                         .dot(select_probs[:-1]))
+
+        if idx == 4:    # End
+            return SEP_TOKEN, select_log_prob, total_entropy
+        else:
+            choice = choices[idx]
+            token, logp = choice[0](choice[1], action)
+            return token, select_log_prob + logp, total_entropy
 
 
 class ValueNet(nn.Module):
@@ -278,11 +285,11 @@ def main():
     for _ in range(50):
         state, info = env.reset()
         while True:
-            action, log_prob = policy.get_action(state, info)
+            action, log_prob, entropy = policy.get_action(state, info)
             state, reward, done, info = env.step(action)
             if done:
                 seq = str(env._builder.get_tree()) if env._builder.is_valid() else "Invalid"
-                print(f"seq: {seq}, log(p): {log_prob}, reward: {reward}")
+                print(f"seq: {seq}, log(p): {log_prob}, entropy: {entropy}, reward: {reward}")
                 break
 
 
