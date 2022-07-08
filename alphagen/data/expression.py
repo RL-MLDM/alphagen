@@ -7,6 +7,10 @@ from torch import Tensor
 from alphagen.data.stock_data import StockData, FeatureType
 
 
+class OutOfDataRangeError(IndexError):
+    pass
+
+
 class Expression(metaclass=ABCMeta):
     @abstractmethod
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor: ...
@@ -61,7 +65,7 @@ class Feature(Expression):
         assert period.step == 1 or period.step is None
         if (period.start < -data.max_backtrack_days or
                 period.stop - 1 > data.max_future_days):
-            raise IndexError()
+            raise OutOfDataRangeError()
         start = period.start + data.max_backtrack_days
         stop = period.stop + data.max_backtrack_days + data.n_days - 1
         return data.data[start:stop, int(self._feature), :]
@@ -77,7 +81,7 @@ class Constant(Expression):
         assert period.step == 1 or period.step is None
         if (period.start < -data.max_backtrack_days or
                 period.stop - 1 > data.max_future_days):
-            raise IndexError()
+            raise OutOfDataRangeError()
         device = data.data.device
         dtype = data.data.dtype
         days = period.stop - period.start - 1 + data.n_days

@@ -3,3 +3,5 @@ __pycache__
 .vscode/
 .DS_STORE
 playground.ipynb
+playground.py
+out/

@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 from qlib.data.dataset.loader import QlibDataLoader
 
-from alphagen.data.expression import Expression
+from alphagen.data.expression import Expression, OutOfDataRangeError
 from alphagen.data.stock_data import StockData
 
 
@@ -39,7 +39,10 @@ class Evaluation:
         return load_expr(expr, self.instrument, self.start_time, self.end_time)
 
     def evaluate(self, expr: Expression) -> float:
-        factor = expr.evaluate(self._data)
+        try:
+            factor = expr.evaluate(self._data)
+        except OutOfDataRangeError:
+            return -1.
         target = self._target.clone()
         nan_mask = factor.isnan() | target.isnan()
         factor[nan_mask] = torch.nan

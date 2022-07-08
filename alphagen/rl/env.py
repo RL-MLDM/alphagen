@@ -7,6 +7,7 @@ from alphagen.data.evaluation import Evaluation
 from alphagen.models.tokens import *
 from alphagen.data.expression import *
 from alphagen.models.tree import AlphaTreeBuilder
+from alphagen.utils.random import reseed_everything
 
 MAX_TOKEN_LENGTH = 20
 
@@ -28,28 +29,11 @@ class AlphaEnvCore(gym.Env):
         self._eval = Evaluation(instrument, start_time, end_time, target, device)
         self._device = device
 
-    @classmethod
-    def _reseed_everything(cls, seed: Optional[int]):
-        if seed is None:
-            return
-        import random
-        import os
-        import numpy as np
-        from torch.backends import cudnn
-
-        random.seed(seed)
-        os.environ["PYTHONHASHSEED"] = str(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        cudnn.deterministic = True
-        cudnn.benchmark = True
-
     def reset(self, /,
               seed: Optional[int] = None,
               return_info: bool = False,
               options: Optional[dict] = None) -> Tuple[List[Token], dict]:
-        self._reseed_everything(seed)
+        reseed_everything(seed)
         self._tokens = [SequenceIndicatorToken(SequenceIndicatorType.BEG)]
         self._builder = AlphaTreeBuilder()
         return self._tokens, self._valid_action_types()
