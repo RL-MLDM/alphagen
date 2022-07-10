@@ -55,7 +55,7 @@ class Policy:
         repr = self._decode_flatten(state)
         act_logp_entropy: Tuple[Token, Tensor, Tensor] = self.policy_net(repr, info, action)
         value = self.value_net(repr, info)
-        return *act_logp_entropy, value
+        return act_logp_entropy[0], act_logp_entropy[1], act_logp_entropy[2], value
 
     def decode(self, state: List[Token]):
         return self.decoder(state)

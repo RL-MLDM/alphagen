@@ -29,7 +29,7 @@ class AlphaEnvCore(gym.Env):
         self._eval = Evaluation(instrument, start_time, end_time, target, device)
         self._device = device
 
-    def reset(self, /,
+    def reset(self, *,
               seed: Optional[int] = None,
               return_info: bool = False,
               options: Optional[dict] = None) -> Tuple[List[Token], dict]:
