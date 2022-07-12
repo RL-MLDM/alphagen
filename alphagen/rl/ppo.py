@@ -4,12 +4,10 @@ import numpy as np
 from tqdm import tqdm
 from dataclasses import dataclass
 
-import torch
-from torch import Tensor
 from torch.optim import Adam
 from torch.nn.utils.clip_grad import clip_grad_value_
 
-from alphagen.models.tokens import Token
+from alphagen.data.tokens import Token
 from alphagen.rl.env import AlphaEnvCore
 from alphagen.rl.policy import Policy
 

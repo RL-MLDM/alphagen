@@ -1,13 +1,12 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional
 import gym
-
-import torch
+import math
 
 from alphagen.config import MAX_TOKEN_LENGTH
 from alphagen.data.evaluation import Evaluation
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 from alphagen.data.expression import *
-from alphagen.models.tree import AlphaTreeBuilder
+from alphagen.data.tree import AlphaTreeBuilder
 from alphagen.utils.random import reseed_everything
 
 

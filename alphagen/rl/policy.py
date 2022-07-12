@@ -1,11 +1,10 @@
 from typing import Tuple, Optional, Callable
 
-import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.distributions import Categorical, Normal, Distribution
 
 from alphagen.models.model import TokenEmbedding, PositionalEncoding
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 from alphagen.data.expression import *
 
 
@@ -270,8 +269,6 @@ def main():
         device=torch.device("cuda:0")
     )
 
-    import qlib
-    from qlib.constant import REG_CN
     from alphagen.rl.env.core import AlphaEnvCore
 
     env = AlphaEnvCore(
