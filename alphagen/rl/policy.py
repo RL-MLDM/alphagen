@@ -272,9 +272,7 @@ def main():
 
     import qlib
     from qlib.constant import REG_CN
-    from alphagen.rl.env import AlphaEnvCore
-
-    qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+    from alphagen.rl.env.core import AlphaEnvCore
 
     env = AlphaEnvCore(
         instrument="csi300",
