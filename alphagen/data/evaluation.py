@@ -1,3 +1,4 @@
+from typing import Tuple
 import pandas as pd
 import torch
 from qlib.data.dataset.loader import QlibDataLoader
@@ -33,7 +34,7 @@ class Evaluation:
         self.start_time = start_time
         self.end_time = end_time
 
-        self.target = self._load('Ref($close,-20)/$close-1').iloc[:, 0].rename("target")
+        # self.target = self._load('Ref($close,-20)/$close-1').iloc[:, 0].rename("target")
 
     def _load(self, expr: str) -> pd.DataFrame:
         return load_expr(expr, self.instrument, self.start_time, self.end_time)
@@ -55,11 +56,23 @@ class Evaluation:
             eq = eq / eq.sum(dim=2, keepdim=True)           # [d, s, s]
             rank = (eq @ rank[:, :, None]).squeeze(dim=2)
             rank[nan_mask] = 0
-            return rank
+            return rank                                     # [d, s]
 
-        diff = rank_data(target) - rank_data(factor)
-        coeff = 6 / (n * (n * n - 1))
-        corrs = 1 - coeff * (diff * diff).sum(dim=1)
+        # Ignore the NaNs when calculating covariance/stddev
+        def mean_std(rank: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+            mean = rank.sum(dim=1) / n
+            std = ((((rank - mean[:, None]) * ~nan_mask) ** 2).sum(dim=1) / n).sqrt()
+            return mean, std
+
+        rx = rank_data(target)
+        ry = rank_data(factor)
+        rx_mean, rx_std = mean_std(rx)
+        ry_mean, ry_std = mean_std(ry)
+        cov = (rx * ry).sum(dim=1) / n - rx_mean * ry_mean
+        stdmul = rx_std * ry_std
+        stdmul[(rx_std < 1e-3) | (ry_std < 1e-3)] = 1
+
+        corrs = cov / stdmul
         return corrs.mean().item()
 
 
