@@ -1,4 +1,5 @@
 import gym
+import gym.spaces
 import numpy as np
 
 from sb3_contrib.common.wrappers import ActionMasker
@@ -45,6 +46,7 @@ def action2token(action_raw: int) -> Token:
 class AlphaEnvWrapper(gym.Wrapper):
     counter: int
     state: np.ndarray
+    env: AlphaEnvCore
 
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
@@ -91,7 +93,8 @@ class AlphaEnvWrapper(gym.Wrapper):
 
 
 def AlphaEnv(*args, **kwargs):
-    return ActionMasker(AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs)), lambda env: env.valid_action_mask())
+    return ActionMasker(AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs)),
+                        lambda env: env.valid_action_mask())    # type: ignore
 
 
 if __name__ == '__main__':
