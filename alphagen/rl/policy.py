@@ -1,11 +1,10 @@
 from typing import Tuple, Optional, Callable
 
-import torch
-from torch import nn, Tensor
+from torch import nn
 from torch.distributions import Categorical, Normal, Distribution
 
 from alphagen.models.model import TokenEmbedding, PositionalEncoding
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 from alphagen.data.expression import *
 
 
@@ -55,7 +54,7 @@ class Policy:
         repr = self._decode_flatten(state)
         act_logp_entropy: Tuple[Token, Tensor, Tensor] = self.policy_net(repr, info, action)
         value = self.value_net(repr, info)
-        return *act_logp_entropy, value
+        return act_logp_entropy[0], act_logp_entropy[1], act_logp_entropy[2], value
 
     def decode(self, state: List[Token]):
         return self.decoder(state)
@@ -270,11 +269,7 @@ def main():
         device=torch.device("cuda:0")
     )
 
-    import qlib
-    from qlib.constant import REG_CN
-    from alphagen.rl.env import AlphaEnvCore
-
-    qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+    from alphagen.rl.env.core import AlphaEnvCore
 
     env = AlphaEnvCore(
         instrument="csi300",

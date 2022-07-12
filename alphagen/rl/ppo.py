@@ -4,12 +4,10 @@ import numpy as np
 from tqdm import tqdm
 from dataclasses import dataclass
 
-import torch
-from torch import Tensor
 from torch.optim import Adam
 from torch.nn.utils.clip_grad import clip_grad_value_
 
-from alphagen.models.tokens import Token
+from alphagen.data.tokens import Token
 from alphagen.rl.env import AlphaEnvCore
 from alphagen.rl.policy import Policy
 
@@ -252,7 +250,7 @@ if __name__ == "__main__":
     reseed_everything(0)
 
     device = torch.device("cuda:0")
-    env = AlphaEnvCore("csi100", "2019-01-01", "2020-12-31", device)
+    env = AlphaEnvCore("csi100", "2018-01-01", "2018-12-31", device)
     policy = Policy(
         n_encoder_layers=4,
         d_model=256,

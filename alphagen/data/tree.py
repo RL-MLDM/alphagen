@@ -1,6 +1,5 @@
-from typing import List
 from alphagen.data.expression import *
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 
 
 class AlphaTreeBuilder:

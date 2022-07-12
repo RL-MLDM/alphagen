@@ -5,7 +5,7 @@ import torch
 from torch import nn, Tensor
 from torch.distributions import Categorical, Normal
 from alphagen.data.expression import Operators
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 
 
 class TokenEmbedding(nn.Module):

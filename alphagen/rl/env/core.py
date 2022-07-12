@@ -1,15 +1,13 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional
 import gym
+import math
 
-import torch
-
+from alphagen.config import MAX_TOKEN_LENGTH
 from alphagen.data.evaluation import Evaluation
-from alphagen.models.tokens import *
+from alphagen.data.tokens import *
 from alphagen.data.expression import *
-from alphagen.models.tree import AlphaTreeBuilder
+from alphagen.data.tree import AlphaTreeBuilder
 from alphagen.utils.random import reseed_everything
-
-MAX_TOKEN_LENGTH = 15
 
 
 class AlphaEnvCore(gym.Env):
@@ -29,7 +27,7 @@ class AlphaEnvCore(gym.Env):
         self._eval = Evaluation(instrument, start_time, end_time, target, device)
         self._device = device
 
-    def reset(self, /,
+    def reset(self, *,
               seed: Optional[int] = None,
               return_info: bool = False,
               options: Optional[dict] = None) -> Tuple[List[Token], dict]:
@@ -51,6 +49,8 @@ class AlphaEnvCore(gym.Env):
         else:
             done = True
             reward = self._evaluate() if self._builder.is_valid() else -1.0
+        if math.isnan(reward):
+            reward = -1
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self):
@@ -78,6 +78,9 @@ class AlphaEnvCore(gym.Env):
             }
         }
         return ret
+
+    def valid_action_types(self) -> dict:
+        return self._valid_action_types()
 
     def render(self, mode="human"):
         pass
