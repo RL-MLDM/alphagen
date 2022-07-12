@@ -77,6 +77,9 @@ class AlphaEnvCore(gym.Env):
         }
         return ret
 
+    def valid_action_types(self) -> dict:
+        return self._valid_action_types()
+
     def render(self, mode="human"):
         pass
 
