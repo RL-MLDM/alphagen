@@ -49,6 +49,8 @@ class AlphaEnvCore(gym.Env):
         else:
             done = True
             reward = self._evaluate() if self._builder.is_valid() else -1.0
+        if math.isnan(reward):
+            reward = -1
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self):
