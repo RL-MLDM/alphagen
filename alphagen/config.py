@@ -1,9 +1,10 @@
+from typing import List, Type
 from alphagen.data.expression import *
 
 
 MAX_TOKEN_LENGTH = 20
 
-OPERATORS = [Add, Sub, Mul, Div, Ref, Abs, EMA, Sum, Mean, Std]
+OPERATORS: List[Type[Operator]] = [Add, Sub, Mul, Div, Ref, Abs, EMA, Sum, Mean, Std]
 
 DELTA_TIMES = [2, 10, 20, 30, 40, 50]
 
