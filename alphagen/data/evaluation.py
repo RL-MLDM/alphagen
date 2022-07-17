@@ -1,4 +1,3 @@
-from typing import Tuple
 import pandas as pd
 import torch
 from qlib.data.dataset.loader import QlibDataLoader
@@ -21,15 +20,14 @@ class Evaluation:
     instrument: str
     start_time: str
     end_time: str
-    target: pd.Series
 
     def __init__(self,
                  instrument: str,
                  start_time: str, end_time: str,
                  target: Expression,
                  device: torch.device = torch.device("cpu")):
-        self._data = StockData(instrument, start_time, end_time, device=device)
-        self._target = target.evaluate(self._data)
+        self.data = StockData(instrument, start_time, end_time, device=device)
+        self._target = target.evaluate(self.data)
 
         self.instrument = instrument
         self.start_time = start_time
@@ -42,7 +40,7 @@ class Evaluation:
 
     def evaluate(self, expr: Expression) -> float:
         try:
-            factor = expr.evaluate(self._data)
+            factor = expr.evaluate(self.data)
         except OutOfDataRangeError:
             return -1.
         target = self._target.clone()

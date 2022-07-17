@@ -61,7 +61,10 @@ class AlphaEnvWrapper(gym.Wrapper):
 
     def step(self, action: int):
         observation, reward, done, info = self.env.step(self.action(action))
-        if not done:
+        if len(observation) == 1:
+            self.state.fill(0)
+            self.counter = 0
+        elif not done:
             self.state[self.counter] = action + 1
             self.counter += 1
         return self.state, self.reward(reward), done, info
