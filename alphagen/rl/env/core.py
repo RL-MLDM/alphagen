@@ -47,25 +47,33 @@ class AlphaEnvCore(gym.Env):
                 action.indicator == SequenceIndicatorType.SEP):
             reward = self._evaluate()
             done = reward < 0 or len(self._exprs) == self._max_expressions
-            self._tokens = [BEG_TOKEN]
-            self._builder = ExpressionBuilder()
         elif len(self._tokens) < MAX_TOKEN_LENGTH:
             self._tokens.append(action)
             self._builder.add_token(action)
-            done = False
             reward = 0.0
+            done = False
         else:
+            reward = self._evaluate()
             done = True
-            reward = self._evaluate() if self._builder.is_valid() else -1.0
-        if math.isnan(reward):
-            reward = -1
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self) -> float:
+        def _reset_for_next_expr() -> None:
+            self._tokens = [BEG_TOKEN]
+            self._builder = ExpressionBuilder()
+
+        if not self._builder.is_valid():
+            _reset_for_next_expr()
+            return -1.0
+
         data = self._eval.data
         expr = self._builder.get_tree()
+
+        self._exprs.append(expr)
+        _reset_for_next_expr()
+
         ic = self._eval.evaluate(expr)
-        max_corr = 0.
+        max_corr = 0.0
         for e in self._exprs:
             try:
                 corrs = batch_spearmanr(expr.evaluate(data), e.evaluate(data))
@@ -73,9 +81,10 @@ class AlphaEnvCore(gym.Env):
                 continue
             corr = corrs.mean().item()
             max_corr = max(max_corr, corr)
-        discount = 1 if ic <= 0 else 1 - max_corr
-        self._exprs.append(expr)
-        return ic * discount
+            
+        discount = 1.0 if ic <= 0 else 1 - max_corr
+        reward = ic * discount
+        return -1.0 if math.isnan(reward) else reward
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
