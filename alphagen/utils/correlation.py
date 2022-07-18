@@ -4,6 +4,8 @@ from torch import Tensor
 
 
 def batch_spearmanr(x: Tensor, y: Tensor) -> Tensor:
+    x = x.clone()
+    y = y.clone()
     nan_mask = x.isnan() | y.isnan()
     x[nan_mask] = torch.nan
     y[nan_mask] = torch.nan
