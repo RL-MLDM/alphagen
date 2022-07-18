@@ -68,8 +68,6 @@ class AlphaEnvCore(gym.Env):
 
         data = self._eval.data
         expr = self._builder.get_tree()
-
-        self._exprs.append(expr)
         _reset_for_next_expr()
 
         ic = self._eval.evaluate(expr)
@@ -81,7 +79,8 @@ class AlphaEnvCore(gym.Env):
                 continue
             corr = corrs.mean().item()
             max_corr = max(max_corr, corr)
-            
+        self._exprs.append(expr)
+
         discount = 1.0 if ic <= 0 else 1 - max_corr
         reward = ic * discount
         return -1.0 if math.isnan(reward) else reward
