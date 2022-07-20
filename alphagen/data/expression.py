@@ -49,6 +49,14 @@ class Expression(metaclass=ABCMeta):
 
     def __rtruediv__(self, other: float) -> "Div": return Div(Constant(other), self)
 
+    def __pow__(self, other: Union["Expression", float]) -> "Pow":
+        if isinstance(other, Expression):
+            return Pow(self, other)
+        else:
+            return Pow(self, Constant(other))
+
+    def __rpow__(self, other: float) -> "Pow": return Pow(Constant(other), self)
+
     def __pos__(self) -> "Expression": return self
     def __neg__(self) -> "Sub": return Sub(Constant(0), self)
     def __abs__(self) -> "Abs": return Abs(self)
@@ -174,11 +182,10 @@ class RollingOperator(Operator):
         stop = period.stop
         # L: period length (requested time window length)
         # W: window length (dt for rolling)
-        # F: feature count
         # S: stock count
-        values = self._operand.evaluate(data, slice(start, stop))   # (L+W-1, F, S)
-        values = values.unfold(0, self._delta_time, 1)              # (L, F, S, W)
-        return self._apply(values)                                  # (L, F, S)
+        values = self._operand.evaluate(data, slice(start, stop))   # (L+W-1, S)
+        values = values.unfold(0, self._delta_time, 1)              # (L, S, W)
+        return self._apply(values)                                  # (L, S)
 
     @abstractmethod
     def _apply(self, operand: Tensor) -> Tensor: ...
@@ -209,15 +216,14 @@ class PairRollingOperator(Operator):
         stop = period.stop
         # L: period length (requested time window length)
         # W: window length (dt for rolling)
-        # F: feature count
         # S: stock count
-        values = expr.evaluate(data, slice(start, stop))            # (L+W-1, F, S)
-        return values.unfold(0, self._delta_time, 1)                # (L, F, S, W)
+        values = expr.evaluate(data, slice(start, stop))            # (L+W-1, S)
+        return values.unfold(0, self._delta_time, 1)                # (L, S, W)
 
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         lhs = self._unfold_one(self._lhs, data, period)
         rhs = self._unfold_one(self._rhs, data, period)
-        return self._apply(lhs, rhs)                                # (L, F, S)
+        return self._apply(lhs, rhs)                                # (L, S)
 
     @abstractmethod
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: ...
@@ -240,6 +246,15 @@ class Log(UnaryOperator):
     def _apply(self, operand: Tensor) -> Tensor: return operand.log()
 
 
+class CSRank(UnaryOperator):
+    def _apply(self, operand: Tensor) -> Tensor:
+        nan_mask = operand.isnan()
+        n = (~nan_mask).sum(dim=1, keepdim=True)
+        rank = operand.argsort().argsort() / n
+        rank[nan_mask] = torch.nan
+        return rank
+
+
 class Add(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs + rhs
 
@@ -254,6 +269,10 @@ class Mul(BinaryOperator):
 
 class Div(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs / rhs
+
+
+class Pow(BinaryOperator):
+    def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs ** rhs
 
 
 class Greater(BinaryOperator):
@@ -335,7 +354,7 @@ class Mad(RollingOperator):
 class Rank(RollingOperator):
     def _apply(self, operand: Tensor) -> Tensor:
         n = operand.shape[-1]
-        last = operand[:, :, :, -1, None]
+        last = operand[:, :, -1, None]
         left = (last < operand).count_nonzero()
         right = (last <= operand).count_nonzero()
         result = (right + left + (right > left)) / (2 * n)
@@ -387,9 +406,9 @@ class Cov(PairRollingOperator):
 
 Operators: List[Type[Expression]] = [
     # Unary
-    Abs, Sign, Log,
+    Abs, Sign, Log, CSRank,
     # Binary
-    Add, Sub, Mul, Div, Greater, Less,
+    Add, Sub, Mul, Div, Pow, Greater, Less,
     # Rolling
     Ref, Mean, Sum, Std, Var, Skew, Kurt, Max, Min,
     Med, Mad, Rank, Delta, WMA, EMA,

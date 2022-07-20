@@ -1,5 +1,7 @@
 import pandas as pd
 import torch
+
+from plotly.graph_objs._figure import Figure
 from qlib.data.dataset.loader import QlibDataLoader
 
 from alphagen.data.expression import Expression, OutOfDataRangeError
@@ -46,6 +48,14 @@ class Evaluation:
         target = self._target.clone()
         corrs = batch_spearmanr(factor, target)
         return corrs.mean().item()
+
+    def performance_graph(self, expr: Expression) -> Figure:
+        from qlib.contrib.report.analysis_model import model_performance_graph
+        data = self.data
+        df = data.make_dataframe([self._target, expr.evaluate(data)], ["label", "score"])
+        fig = model_performance_graph(
+            df, rank=True, graph_names=["group_return"], show_notebook=False)[0]
+        return fig
 
 
 if __name__ == '__main__':
