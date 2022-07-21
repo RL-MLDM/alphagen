@@ -9,15 +9,6 @@ from alphagen.data.stock_data import StockData
 from alphagen.utils.correlation import batch_spearmanr
 
 
-def _load_expr(expr: str, instrument: str, start_time: str, end_time: str) -> pd.DataFrame:
-    return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
-            .load(instrument, start_time, end_time))
-
-
-def _correlation(joined: pd.DataFrame):
-    return joined["factor"].corr(joined["target"], method="spearman")
-
-
 class Evaluation:
     instrument: str
     start_time: str
@@ -35,10 +26,9 @@ class Evaluation:
         self.start_time = start_time
         self.end_time = end_time
 
-        # self.target = self._load('Ref($close,-20)/$close-1').iloc[:, 0].rename("target")
-
     def _load(self, expr: str) -> pd.DataFrame:
-        return _load_expr(expr, self.instrument, self.start_time, self.end_time)
+        return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
+                .load(self.instrument, self.start_time, self.end_time))
 
     def evaluate(self, expr: Expression) -> float:
         try:
