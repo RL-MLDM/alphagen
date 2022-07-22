@@ -44,29 +44,38 @@ def action2token(action_raw: int) -> Token:
 
 
 class AlphaEnvWrapper(gym.Wrapper):
-    counter: int
+    _current: int
+    _previous: int
     state: np.ndarray
     env: AlphaEnvCore
+    action_space: gym.spaces.Discrete
+    observation_space: gym.spaces.Box
 
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
         self.action_space = gym.spaces.Discrete(SIZE_ACTION)
-        self.observation_space = gym.spaces.Box(low=0, high=SIZE_ALL-1, shape=(MAX_TOKEN_LENGTH, ), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(
+            low=0, high=SIZE_ALL-1, shape=(MAX_EPISODE_LENGTH, ), dtype=np.uint8)
 
     def reset(self, **kwargs) -> np.ndarray:
-        self.counter = 0
-        self.state = np.zeros(MAX_TOKEN_LENGTH, dtype=np.uint8)
+        self._current = 1
+        self._previous = MAX_EXPR_LENGTH + 1
+        self.state = np.zeros(MAX_EPISODE_LENGTH, dtype=np.uint8)
+        self.state[0] = self.state[MAX_EXPR_LENGTH] = OFFSET_SEP + 1    # [BEG]
         self.env.reset()
         return self.state
 
     def step(self, action: int):
         observation, reward, done, info = self.env.step(self.action(action))
-        if len(observation) == 1:
-            self.state.fill(0)
-            self.counter = 0
+        self.state[self._current] = action + 1
+        if len(observation[0]) == 1:
+            dst_slice = slice(self._previous, self._previous + MAX_EXPR_LENGTH - 1)
+            self.state[dst_slice] = self.state[1:MAX_EXPR_LENGTH]
+            self.state[1:MAX_EXPR_LENGTH].fill(0)
+            self._previous += self._current
+            self._current = 1
         elif not done:
-            self.state[self.counter] = action + 1
-            self.counter += 1
+            self._current += 1
         return self.state, self.reward(reward), done, info
 
     def action(self, action: int) -> Token:
@@ -80,18 +89,18 @@ class AlphaEnvWrapper(gym.Wrapper):
         valid = self.env.valid_action_types()
         for i in range(OFFSET_OP, OFFSET_OP + SIZE_OP):
             if valid['op'][OPERATORS[i - OFFSET_OP].category_type()]:
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][1]:  # FEATURE
             for i in range(OFFSET_FEATURE, OFFSET_FEATURE + SIZE_FEATURE):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][2]:  # CONSTANT
             for i in range(OFFSET_CONSTANT, OFFSET_CONSTANT + SIZE_CONSTANT):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][3]:  # DELTA_TIME
             for i in range(OFFSET_DELTA_TIME, OFFSET_DELTA_TIME + SIZE_DELTA_TIME):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][4]:  # SEP
-            res[OFFSET_SEP-1] = True
+            res[OFFSET_SEP - 1] = True
         return res
 
 

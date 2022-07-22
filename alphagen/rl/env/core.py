@@ -2,7 +2,7 @@ from typing import Tuple, Optional
 import gym
 import math
 
-from alphagen.config import MAX_TOKEN_LENGTH
+from alphagen.config import MAX_EXPR_LENGTH
 from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
@@ -14,7 +14,7 @@ class AlphaEnvCore(gym.Env):
     _eval: Evaluation
     _max_expressions: int
     _exprs: List[Expression]
-    _tokens: List[Token]
+    _tokens: List[List[Token]]
     _builder: ExpressionBuilder
 
     def __init__(self,
@@ -35,40 +35,41 @@ class AlphaEnvCore(gym.Env):
     def reset(self, *,
               seed: Optional[int] = None,
               return_info: bool = False,
-              options: Optional[dict] = None) -> Tuple[List[Token], dict]:
+              options: Optional[dict] = None) -> Tuple[List[List[Token]], dict]:
         reseed_everything(seed)
         self._exprs = []
-        self._tokens = [BEG_TOKEN]
+        self._tokens = [[BEG_TOKEN]]
         self._builder = ExpressionBuilder()
         return self._tokens, self._valid_action_types()
 
-    def step(self, action: Token) -> Tuple[List[Token], float, bool, dict]:
+    def step(self, action: Token) -> Tuple[List[List[Token]], float, bool, dict]:
         if (isinstance(action, SequenceIndicatorToken) and
                 action.indicator == SequenceIndicatorType.SEP):
             reward = self._evaluate()
             done = reward < 0 or len(self._exprs) == self._max_expressions
-        elif len(self._tokens) < MAX_TOKEN_LENGTH:
-            self._tokens.append(action)
-            self._builder.add_token(action)
-            reward = 0.0
-            done = False
         else:
-            reward = self._evaluate()
-            done = True
+            self._tokens[0].append(action)
+            self._builder.add_token(action)
+            if len(self._tokens[0]) < MAX_EXPR_LENGTH:
+                reward = 0.0
+                done = False
+            else:
+                reward = self._evaluate()
+                done = True
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self) -> float:
-        def _reset_for_next_expr() -> None:
-            self._tokens = [BEG_TOKEN]
-            self._builder = ExpressionBuilder()
-
         if not self._builder.is_valid():
-            _reset_for_next_expr()
+            self._tokens.append([])
+            self._tokens[0] = [BEG_TOKEN]   # type: ignore (Pylance bug workaround)
+            self._builder = ExpressionBuilder()
             return -1.0
 
         data = self._eval.data
         expr = self._builder.get_tree()
-        _reset_for_next_expr()
+        self._tokens.append(self._tokens[0])
+        self._tokens[0] = [BEG_TOKEN]       # type: ignore (Pylance bug workaround)
+        self._builder = ExpressionBuilder()
 
         ic = self._eval.evaluate(expr)
         max_corr = 0.0
