@@ -4,7 +4,7 @@ import torch
 from plotly.graph_objs._figure import Figure
 from qlib.data.dataset.loader import QlibDataLoader
 
-from alphagen.data.expression import Expression, OutOfDataRangeError
+from alphagen.data.expression import *
 from alphagen.data.stock_data import StockData
 from alphagen.utils.correlation import batch_spearmanr
 

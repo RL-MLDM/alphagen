@@ -355,8 +355,8 @@ class Rank(RollingOperator):
     def _apply(self, operand: Tensor) -> Tensor:
         n = operand.shape[-1]
         last = operand[:, :, -1, None]
-        left = (last < operand).count_nonzero()
-        right = (last <= operand).count_nonzero()
+        left = (last < operand).count_nonzero(dim=-1)
+        right = (last <= operand).count_nonzero(dim=-1)
         result = (right + left + (right > left)) / (2 * n)
         return result
 
@@ -403,6 +403,16 @@ class Cov(PairRollingOperator):
         crhs = rhs - rhs.mean(dim=-1, keepdim=True)
         return (clhs * crhs).sum(dim=-1) / (n - 1)
 
+    
+class Corr(PairRollingOperator):
+    def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor:
+        clhs = lhs - lhs.mean(dim=-1, keepdim=True)
+        crhs = rhs - rhs.mean(dim=-1, keepdim=True)
+        ncov = (clhs * crhs).sum(dim=-1)
+        nlvar = (clhs ** 2).sum(dim=-1)
+        nrvar = (crhs ** 2).sum(dim=-1)
+        return ncov / (nlvar * nrvar).sqrt()
+
 
 Operators: List[Type[Expression]] = [
     # Unary
@@ -413,5 +423,5 @@ Operators: List[Type[Expression]] = [
     Ref, Mean, Sum, Std, Var, Skew, Kurt, Max, Min,
     Med, Mad, Rank, Delta, WMA, EMA,
     # Pair rolling
-    Cov
+    Cov, Corr
 ]
