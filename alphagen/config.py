@@ -3,10 +3,21 @@ from alphagen.data.expression import *
 
 MAX_TOKEN_LENGTH = 20
 
-OPERATORS = [Add, Sub, Mul, Div, Ref, Abs, EMA, Sum, Mean, Std]
+OPERATORS = [
+    # Unary
+    Abs, Sign, Log,
+    # Binary
+    Add, Sub, Mul, Div, Greater, Less,
+    # Rolling
+    Ref, Mean, Sum, Std, Var, Skew, Kurt, Max, Min,
+    Med, Mad,  # Rank,
+    Delta, WMA, EMA,
+    # Pair rolling
+    Cov
+]
 
 DELTA_TIMES = [2, 10, 20, 30, 40, 50]
 
 CONSTANTS = [-30., -10., -5., -2., -1., -0.5, -0.01, 0.01, 0.5, 1., 2., 5., 10., 30.]
 
-REWARD_PER_STEP = 0.0  # 0.00005
+REWARD_PER_STEP = 0.00015

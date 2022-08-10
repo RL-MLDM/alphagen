@@ -14,17 +14,20 @@ class AlphaEnvCore(gym.Env):
     _eval: Evaluation
     _tokens: List[Token]
     _builder: AlphaTreeBuilder
+    _print_expr: bool
 
     def __init__(self,
                  instrument: str,
                  start_time: str, end_time: str,
-                 device: torch.device = torch.device("cpu")):
+                 device: torch.device = torch.device("cpu"),
+                 print_expr: bool = False):
         super().__init__()
 
         close = Feature(FeatureType.CLOSE)
         target = Ref(close, -20) / close - 1
 
         self._eval = Evaluation(instrument, start_time, end_time, target, device)
+        self._print_expr = print_expr
         self._device = device
 
     def reset(self, *,
@@ -54,7 +57,10 @@ class AlphaEnvCore(gym.Env):
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self):
-        return self._eval.evaluate(self._builder.get_tree())
+        expr: Expression = self._builder.get_tree()
+        if self._print_expr:
+            print(expr)
+        return self._eval.evaluate(expr)
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
