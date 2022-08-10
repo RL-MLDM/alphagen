@@ -1,66 +1,51 @@
 import pandas as pd
 import torch
+
+from plotly.graph_objs._figure import Figure
 from qlib.data.dataset.loader import QlibDataLoader
 
 from alphagen.data.expression import Expression, OutOfDataRangeError
 from alphagen.data.stock_data import StockData
-
-
-def load_expr(expr: str, instrument: str, start_time: str, end_time: str) -> pd.DataFrame:
-    return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
-            .load(instrument, start_time, end_time))
-
-
-def correlation(joined: pd.DataFrame):
-    return joined["factor"].corr(joined["target"], method="spearman")
+from alphagen.utils.correlation import batch_spearmanr
 
 
 class Evaluation:
     instrument: str
     start_time: str
     end_time: str
-    target: pd.Series
 
     def __init__(self,
                  instrument: str,
                  start_time: str, end_time: str,
                  target: Expression,
                  device: torch.device = torch.device("cpu")):
-        self._data = StockData(instrument, start_time, end_time, device=device)
-        self._target = target.evaluate(self._data)
+        self.data = StockData(instrument, start_time, end_time, device=device)
+        self._target = target.evaluate(self.data)
 
         self.instrument = instrument
         self.start_time = start_time
         self.end_time = end_time
 
-        self.target = self._load('Ref($close,-20)/$close-1').iloc[:, 0].rename("target")
-
     def _load(self, expr: str) -> pd.DataFrame:
-        return load_expr(expr, self.instrument, self.start_time, self.end_time)
+        return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
+                .load(self.instrument, self.start_time, self.end_time))
 
     def evaluate(self, expr: Expression) -> float:
         try:
-            factor = expr.evaluate(self._data)
+            factor = expr.evaluate(self.data)
         except OutOfDataRangeError:
             return -1.
         target = self._target.clone()
-        nan_mask = factor.isnan() | target.isnan()
-        factor[nan_mask] = torch.nan
-        target[nan_mask] = torch.nan
-        n = (~nan_mask).sum(dim=1)
-
-        def rank_data(data: torch.Tensor) -> torch.Tensor:
-            rank = data.argsort().argsort().float()         # [d, s]
-            eq = data[:, None] == data[:, :, None]          # [d, s, s]
-            eq = eq / eq.sum(dim=2, keepdim=True)           # [d, s, s]
-            rank = (eq @ rank[:, :, None]).squeeze(dim=2)
-            rank[nan_mask] = 0
-            return rank
-
-        diff = rank_data(target) - rank_data(factor)
-        coeff = 6 / (n * (n * n - 1))
-        corrs = 1 - coeff * (diff * diff).sum(dim=1)
+        corrs = batch_spearmanr(factor, target)
         return corrs.mean().item()
+
+    def performance_graph(self, expr: Expression) -> Figure:
+        from qlib.contrib.report.analysis_model import model_performance_graph
+        data = self.data
+        df = data.make_dataframe([self._target, expr.evaluate(data)], ["label", "score"])
+        fig = model_performance_graph(
+            df, rank=True, graph_names=["group_return"], show_notebook=False)[0]
+        return fig
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ from torch.optim import Adam
 from torch.nn.utils.clip_grad import clip_grad_value_
 
 from alphagen.data.tokens import Token
-from alphagen.rl.env import AlphaEnvCore
+from alphagen.rl.env.core import AlphaEnvCore
 from alphagen.rl.policy import Policy
 
 
