@@ -1,11 +1,10 @@
-import random
-from typing import Tuple, List
-
+from typing import Tuple
 import pandas as pd
 import torch
 from qlib.data.dataset.loader import QlibDataLoader
 
-from alphagen.data.expression import Expression
+from alphagen.data.expression import Expression, OutOfDataRangeError
+from alphagen.data.stock_data import StockData
 
 
 def load_expr(expr: str, instrument: str, start_time: str, end_time: str) -> pd.DataFrame:
@@ -17,12 +16,7 @@ def correlation(joined: pd.DataFrame):
     return joined["factor"].corr(joined["target"], method="spearman")
 
 
-class EvaluationBase:
-    def evaluate(self, expr: Expression) -> float:
-        raise NotImplementedError
-
-
-class QLibEvaluation(EvaluationBase):
+class Evaluation:
     instrument: str
     start_time: str
     end_time: str
@@ -39,6 +33,8 @@ class QLibEvaluation(EvaluationBase):
         self.instrument = instrument
         self.start_time = start_time
         self.end_time = end_time
+
+        # self.target = self._load('Ref($close,-20)/$close-1').iloc[:, 0].rename("target")
 
     def _load(self, expr: str) -> pd.DataFrame:
         return load_expr(expr, self.instrument, self.start_time, self.end_time)
@@ -80,16 +76,6 @@ class QLibEvaluation(EvaluationBase):
         return corrs.mean().item()
 
 
-class EvaluationPool(EvaluationBase):
-    evaluations: List[EvaluationBase]
-
-    def __init__(self, evaluations: List[EvaluationBase]):
-        self.evaluations = evaluations
-
-    def evaluate(self, expr: Expression) -> float:
-        return random.choice(self.evaluations).evaluate(expr)
-
-
 if __name__ == '__main__':
     from alphagen.data.expression import *
 
@@ -100,8 +86,5 @@ if __name__ == '__main__':
     target = Ref(close, -20) / close - 1
     expr = Ref(abs(low), 10) + high / close
 
-    ev1 = QLibEvaluation('csi300', '2016-01-01', '2018-12-31', target)
-    ev2 = QLibEvaluation('csi300', '2014-01-01', '2015-12-31', target)
-    ev_pool = EvaluationPool([ev1, ev2])
-    for i in range(10):
-        print(ev_pool.evaluate(expr))
+    ev = Evaluation('csi300', '2016-01-01', '2018-12-31', target)
+    print(ev.evaluate(expr))
