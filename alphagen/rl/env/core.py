@@ -3,7 +3,7 @@ import gym
 import math
 
 from alphagen.config import MAX_TOKEN_LENGTH
-from alphagen.data.evaluation import Evaluation
+from alphagen.data.evaluation import EvaluationBase
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import AlphaTreeBuilder
@@ -11,24 +11,21 @@ from alphagen.utils.random import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
-    _eval: Evaluation
+    _ev: EvaluationBase
     _tokens: List[Token]
     _builder: AlphaTreeBuilder
     _print_expr: bool
+    _dirty_action: bool
 
     def __init__(self,
-                 instrument: str,
-                 start_time: str, end_time: str,
-                 device: torch.device = torch.device("cpu"),
-                 print_expr: bool = False):
+                 ev: EvaluationBase,
+                 print_expr: bool = False,
+                 dirty_action: bool = False):
         super().__init__()
 
-        close = Feature(FeatureType.CLOSE)
-        target = Ref(close, -20) / close - 1
-
-        self._eval = Evaluation(instrument, start_time, end_time, target, device)
+        self._ev = ev
         self._print_expr = print_expr
-        self._device = device
+        self._dirty_action = dirty_action
 
     def reset(self, *,
               seed: Optional[int] = None,
@@ -43,15 +40,20 @@ class AlphaEnvCore(gym.Env):
         if (isinstance(action, SequenceIndicatorToken) and
                 action.indicator == SequenceIndicatorType.SEP):
             done = True
-            reward = self._evaluate()
-        elif len(self._tokens) < MAX_TOKEN_LENGTH:
+            reward = self._evaluate() if self._builder.is_valid() else -1.0
+        elif self._dirty_action and not self._builder.validate(action):
+            done = True
+            reward = -1
+        else:
             self._tokens.append(action)
             self._builder.add_token(action)
-            done = False
-            reward = 0.0
-        else:
-            done = True
-            reward = self._evaluate() if self._builder.is_valid() else -1.0
+            if len(self._tokens) >= MAX_TOKEN_LENGTH:
+                done = True
+                reward = self._evaluate() if self._builder.is_valid() else -1.0
+            else:
+                done = False
+                reward = 0.0
+
         if math.isnan(reward):
             reward = -1
         return self._tokens, reward, done, self._valid_action_types()
@@ -60,7 +62,7 @@ class AlphaEnvCore(gym.Env):
         expr: Expression = self._builder.get_tree()
         if self._print_expr:
             print(expr)
-        return self._eval.evaluate(expr)
+        return self._ev.evaluate(expr)
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
@@ -93,11 +95,13 @@ class AlphaEnvCore(gym.Env):
 
 
 if __name__ == '__main__':
-    env = AlphaEnvCore(
-        instrument='csi300',
-        start_time='2016-01-01',
-        end_time='2018-12-31'
-    )
+    from alphagen.data.evaluation import QLibEvaluation
+
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
+
+    ev = QLibEvaluation('csi300', '2016-01-01', '2018-12-31', target)
+    env = AlphaEnvCore(ev=ev)
 
     tokens = [
         FeatureToken(FeatureType.LOW),
