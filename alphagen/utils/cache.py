@@ -1,15 +1,16 @@
-from collections import OrderedDict
+from collections import OrderedDict, Counter
 
 
 class LRUCache:
     def __init__(self, capacity: int):
         self.cache = OrderedDict()
         self.capacity = capacity
-        self.best_key = ''
-        self.best_value = -2.
 
     def __len__(self):
         return len(self.cache)
+
+    def top_k(self, k) -> dict:
+        return dict(Counter(self.cache).most_common(k))
 
     def get(self, key: str) -> int:
         if key not in self.cache:
@@ -23,6 +24,3 @@ class LRUCache:
         self.cache.move_to_end(key)
         if len(self.cache) > self.capacity:
             self.cache.popitem(last=False)
-        if value > self.best_value:
-            self.best_key = key
-            self.best_value = value

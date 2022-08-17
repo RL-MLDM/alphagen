@@ -10,9 +10,16 @@ from alphagen.utils.random import reseed_everything
 
 
 class CustomCallback(BaseCallback):
-    def __init__(self, save_freq: int, save_path: str, name_prefix: str = "rl_model", verbose: int = 0):
+    def __init__(self,
+                 save_freq: int,
+                 show_freq: int,
+                 save_path: str,
+                 name_prefix: str = "rl_model",
+                 verbose: int = 0
+                 ):
         super().__init__(verbose)
         self.save_freq = save_freq
+        self.show_freq = show_freq
         self.save_path = save_path
         self.name_prefix = name_prefix
 
@@ -23,6 +30,7 @@ class CustomCallback(BaseCallback):
     def _on_step(self) -> bool:
         if self.n_calls % self.save_freq == 0:
             self.save_checkpoint()
+        if self.n_calls % self.show_freq == 0:
             self.show_top_alphas()
         return True
 
@@ -37,7 +45,9 @@ class CustomCallback(BaseCallback):
 
     def show_top_alphas(self):
         if self.verbose > 0:
-            print(self.cache.best_key, self.cache.best_value)
+            top_5 = self.cache.top_k(5)
+            for key in top_5:
+                print(key, top_5[key])
 
     @property
     def cache(self) -> LRUCache:
@@ -63,7 +73,13 @@ if __name__ == '__main__':
                    'SH601988', 'SH601989', 'SH601998', 'SH603993']
     env = AlphaEnv(csi100_2018, "2018-01-01", "2018-12-31", device)
 
-    checkpoint_callback = CustomCallback(save_freq=10000, save_path='./logs/', name_prefix='maskable_ppo', verbose=1)
+    checkpoint_callback = CustomCallback(
+        save_freq=10000,
+        show_freq=10000,
+        save_path='./logs/',
+        name_prefix='maskable_ppo',
+        verbose=1
+    )
 
     model = MaskablePPO(
         'MlpPolicy',
