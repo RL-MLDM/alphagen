@@ -11,7 +11,7 @@ from alphagen.utils.random import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
-    _eval: Evaluation
+    eval: Evaluation
     _tokens: List[Token]
     _builder: AlphaTreeBuilder
     _print_expr: bool
@@ -26,7 +26,7 @@ class AlphaEnvCore(gym.Env):
         close = Feature(FeatureType.CLOSE)
         target = Ref(close, -20) / close - 1
 
-        self._eval = Evaluation(instrument, start_time, end_time, target, device)
+        self.eval = Evaluation(instrument, start_time, end_time, target, device)
         self._print_expr = print_expr
         self._device = device
 
@@ -60,7 +60,7 @@ class AlphaEnvCore(gym.Env):
         expr: Expression = self._builder.get_tree()
         if self._print_expr:
             print(expr)
-        return self._eval.evaluate(expr)
+        return self.eval.evaluate(expr)
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
