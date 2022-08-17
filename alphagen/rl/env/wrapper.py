@@ -50,18 +50,18 @@ class AlphaEnvWrapper(gym.Wrapper):
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
         self.action_space = gym.spaces.Discrete(SIZE_ACTION)
-        self.observation_space = gym.spaces.Box(low=0, high=SIZE_ALL-1, shape=(MAX_TOKEN_LENGTH, ), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(MAX_TOKEN_LENGTH * SIZE_ACTION, ), dtype=np.uint8)
 
     def reset(self, **kwargs) -> np.ndarray:
         self.counter = 0
-        self.state = np.zeros(MAX_TOKEN_LENGTH, dtype=np.uint8)
+        self.state = np.zeros(MAX_TOKEN_LENGTH * SIZE_ACTION, dtype=np.uint8)
         self.env.reset()
         return self.state
 
     def step(self, action: int):
         observation, reward, done, info = self.env.step(self.action(action))
         if not done:
-            self.state[self.counter] = action + 1
+            self.state[self.counter * SIZE_ACTION + action] = 1
             self.counter += 1
         return self.state, self.reward(reward), done, info
 
@@ -111,15 +111,15 @@ if __name__ == '__main__':
 
     state = env.reset()
     actions = [
-        OFFSET_FEATURE + FeatureType.LOW,
-        OFFSET_OP + 5,  # Abs
-        OFFSET_DELTA_TIME + 1,
-        OFFSET_OP + 4,  # Ref
-        OFFSET_FEATURE + FeatureType.HIGH,
-        OFFSET_FEATURE + FeatureType.CLOSE,
-        OFFSET_OP + 3,  # Div
-        OFFSET_OP + 0,  # Add
-        OFFSET_SEP,
+        -1 + OFFSET_FEATURE + FeatureType.LOW,
+        -1 + OFFSET_OP + 0,  # Abs
+        -1 + OFFSET_DELTA_TIME + 1,
+        -1 + OFFSET_OP + 9,  # Ref
+        -1 + OFFSET_FEATURE + FeatureType.HIGH,
+        -1 + OFFSET_FEATURE + FeatureType.CLOSE,
+        -1 + OFFSET_OP + 6,  # Div
+        -1 + OFFSET_OP + 3,  # Add
+        -1 + OFFSET_SEP,
     ]
     for action in actions:
         print(env.step(action)[:-1])
