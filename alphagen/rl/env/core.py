@@ -17,16 +17,12 @@ class AlphaEnvCore(gym.Env):
     _print_expr: bool
 
     def __init__(self,
-                 instrument: str,
-                 start_time: str, end_time: str,
+                 ev: Evaluation,
                  device: torch.device = torch.device("cpu"),
                  print_expr: bool = False):
         super().__init__()
 
-        close = Feature(FeatureType.CLOSE)
-        target = Ref(close, -20) / close - 1
-
-        self.eval = Evaluation(instrument, start_time, end_time, target, device)
+        self.eval = ev
         self._print_expr = print_expr
         self._device = device
 
@@ -93,11 +89,18 @@ class AlphaEnvCore(gym.Env):
 
 
 if __name__ == '__main__':
-    env = AlphaEnvCore(
+    from alphagen_qlib.evaluation import QLibEvaluation
+
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
+
+    ev = QLibEvaluation(
         instrument='csi300',
         start_time='2016-01-01',
-        end_time='2018-12-31'
+        end_time='2018-12-31',
+        target=target
     )
+    env = AlphaEnvCore(ev)
 
     tokens = [
         FeatureToken(FeatureType.LOW),

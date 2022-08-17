@@ -2,9 +2,8 @@ import gym
 import gym.spaces
 import numpy as np
 
-from sb3_contrib.common.wrappers import ActionMasker
-
 from alphagen.config import *
+from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.rl.env.core import AlphaEnvCore
 
@@ -72,7 +71,7 @@ class AlphaEnvWrapper(gym.Wrapper):
     def reward(self, reward: float) -> float:
         return reward + REWARD_PER_STEP
 
-    def valid_action_mask(self) -> np.ndarray:
+    def action_masks(self) -> np.ndarray:
         res = np.zeros(SIZE_ACTION, dtype=bool)
         valid = self.env.valid_action_types()
         for i in range(OFFSET_OP, OFFSET_OP + SIZE_OP):
@@ -92,17 +91,23 @@ class AlphaEnvWrapper(gym.Wrapper):
         return res
 
 
-def AlphaEnv(*args, **kwargs):
-    return ActionMasker(AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs)),
-                        lambda env: env.valid_action_mask())    # type: ignore
+def AlphaEnv(ev: Evaluation, **kwargs):
+    return AlphaEnvWrapper(AlphaEnvCore(ev, **kwargs))
 
 
 if __name__ == '__main__':
-    env = AlphaEnv(
-        instrument="csi300",
-        start_time="2016-01-01",
-        end_time="2018-12-31"
+    from alphagen_qlib.evaluation import QLibEvaluation
+
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
+
+    ev = QLibEvaluation(
+        instrument='csi300',
+        start_time='2016-01-01',
+        end_time='2018-12-31',
+        target=target
     )
+    env = AlphaEnv(ev)
 
     state = env.reset()
     actions = [

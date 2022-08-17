@@ -1,12 +1,13 @@
 import os
 
-import torch
 from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 
-from alphagen.data.evaluation import LRUCache
+from alphagen.data.expression import *
 from alphagen.rl.env.wrapper import AlphaEnv
+from alphagen.utils.cache import LRUCache
 from alphagen.utils.random import reseed_everything
+from alphagen_qlib.evaluation import QLibEvaluation
 
 
 class CustomCallback(BaseCallback):
@@ -71,7 +72,17 @@ if __name__ == '__main__':
                    'SH601618', 'SH601628', 'SH601633', 'SH601668', 'SH601669', 'SH601688', 'SH601727', 'SH601766',
                    'SH601788', 'SH601800', 'SH601818', 'SH601857', 'SH601881', 'SH601899', 'SH601901', 'SH601985',
                    'SH601988', 'SH601989', 'SH601998', 'SH603993']
-    env = AlphaEnv(csi100_2018, "2018-01-01", "2018-12-31", device)
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
+
+    ev = QLibEvaluation(
+        instrument=csi100_2018,
+        start_time='2018-01-01',
+        end_time='2018-12-31',
+        target=target,
+        device=device
+    )
+    env = AlphaEnv(ev)
 
     checkpoint_callback = CustomCallback(
         save_freq=10000,

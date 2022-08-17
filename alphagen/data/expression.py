@@ -4,7 +4,7 @@ from typing import List, Type, Union
 import torch
 from torch import Tensor
 
-from alphagen.data.stock_data import StockData, FeatureType
+from alphagen_qlib.stock_data import StockData, FeatureType
 
 
 class OutOfDataRangeError(IndexError):
