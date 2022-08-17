@@ -1,73 +1,12 @@
-from collections import OrderedDict
-from typing import Tuple, Union, List
+from typing import Union, List
 
 import pandas as pd
 import torch
-from torch import Tensor
 
 from alphagen.data.expression import Expression, OutOfDataRangeError
 from alphagen.data.stock_data import StockData
-
-
-class LRUCache:
-    def __init__(self, capacity: int):
-        self.cache = OrderedDict()
-        self.capacity = capacity
-        self.best_key = ''
-        self.best_value = -2.
-
-    def __len__(self):
-        return len(self.cache)
-
-    def get(self, key: str) -> int:
-        if key not in self.cache:
-            return -2
-        else:
-            self.cache.move_to_end(key)
-            return self.cache[key]
-
-    def put(self, key: str, value: int) -> None:
-        self.cache[key] = value
-        self.cache.move_to_end(key)
-        if len(self.cache) > self.capacity:
-            self.cache.popitem(last=False)
-        if value > self.best_value:
-            self.best_key = key
-            self.best_value = value
-
-
-def batch_spearman(x: Tensor, y: Tensor) -> Tensor:
-    x = x.clone()
-    y = y.clone()
-    nan_mask = x.isnan() | y.isnan()
-    x[nan_mask] = torch.nan
-    y[nan_mask] = torch.nan
-    n = (~nan_mask).sum(dim=1)
-
-    def rank_data(data: Tensor) -> Tensor:
-        rank = data.argsort().argsort().float()         # [d, s]
-        eq = data[:, None] == data[:, :, None]          # [d, s, s]
-        eq = eq / eq.sum(dim=2, keepdim=True)           # [d, s, s]
-        rank = (eq @ rank[:, :, None]).squeeze(dim=2)
-        rank[nan_mask] = 0
-        return rank                                     # [d, s]
-
-    # Ignore the NaNs when calculating covariance/stddev
-    def mean_std(rank: Tensor) -> Tuple[Tensor, Tensor]:
-        mean = rank.sum(dim=1) / n
-        std = ((((rank - mean[:, None]) * ~nan_mask) ** 2).sum(dim=1) / n).sqrt()
-        return mean, std
-
-    rx = rank_data(y)
-    ry = rank_data(x)
-    rx_mean, rx_std = mean_std(rx)
-    ry_mean, ry_std = mean_std(ry)
-    cov = (rx * ry).sum(dim=1) / n - rx_mean * ry_mean
-    stdmul = rx_std * ry_std
-    stdmul[(rx_std < 1e-3) | (ry_std < 1e-3)] = 1
-
-    corrs = cov / stdmul
-    return corrs
+from alphagen.utils.cache import LRUCache
+from alphagen.utils.correlation import batch_spearman
 
 
 class Evaluation:
