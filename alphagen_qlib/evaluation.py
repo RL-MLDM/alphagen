@@ -5,7 +5,7 @@ import torch
 
 from alphagen.data.evaluation import Evaluation
 from alphagen.data.expression import Expression, OutOfDataRangeError
-from alphagen.utils.cache import LRUCache
+from alphagen.utils.cache import LRUCache, LRUCACHE_NOT_FOUND
 from alphagen.utils.correlation import batch_spearman
 from alphagen_qlib.stock_data import StockData
 
@@ -33,7 +33,7 @@ class QLibEvaluation(Evaluation):
     def evaluate(self, expr: Expression) -> float:
         key = str(expr)
         existing_val = self.cache.get(key)
-        if existing_val != -2:
+        if existing_val != LRUCACHE_NOT_FOUND:
             return existing_val
 
         try:

@@ -37,6 +37,9 @@ class CustomCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self.logger.record('cache/size', len(self.cache))
+        self.logger.record('cache/gt_0.03', self.cache.greater_than_count(0.03))
+        self.logger.record('cache/top_1%', self.cache.quantile(0.99))
+        self.logger.record('cache/top_100_avg', self.cache.top_k_average(100))
 
     def save_checkpoint(self):
         path = os.path.join(self.save_path, f"{self.name_prefix}_{self.num_timesteps}_steps")
