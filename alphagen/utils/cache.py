@@ -47,6 +47,11 @@ class LRUCache:
         else:
             self._put_valid(key, value)
 
+    def save(self, path: str):
+        import json
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump({'valid': self.cache_valid, 'nan': self.cache_nan}, f, ensure_ascii=False, indent=4)
+
     def _put_valid(self, key: str, value: int) -> None:
         self.cache_valid[key] = value
         self.cache_valid.move_to_end(key)
