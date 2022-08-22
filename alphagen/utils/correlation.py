@@ -32,7 +32,7 @@ def batch_spearman(x: Tensor, y: Tensor) -> Tensor:
     ry_mean, ry_std = mean_std(ry)
     cov = (rx * ry).sum(dim=1) / n - rx_mean * ry_mean
     stdmul = rx_std * ry_std
-    stdmul[(rx_std < 1e-3) | (ry_std < 1e-3)] = 1
+    stdmul[(rx_std < 1e-4) | (ry_std < 1e-4)] = 1
 
     corrs = cov / stdmul
     return corrs
