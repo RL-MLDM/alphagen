@@ -2,6 +2,7 @@ import os
 
 from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
+from datetime import datetime
 
 from alphagen.data.expression import *
 from alphagen.rl.env.wrapper import AlphaEnv
@@ -16,6 +17,7 @@ class CustomCallback(BaseCallback):
                  show_freq: int,
                  save_path: str,
                  name_prefix: str = "rl_model",
+                 timestamp: str = None,
                  verbose: int = 0
                  ):
         super().__init__(verbose)
@@ -23,6 +25,12 @@ class CustomCallback(BaseCallback):
         self.show_freq = show_freq
         self.save_path = save_path
         self.name_prefix = name_prefix
+        self.env_name = 'AlphaGen-v0'
+
+        if timestamp is None:
+            self.timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        else:
+            self.timestamp = timestamp
 
     def _init_callback(self) -> None:
         if self.save_path is not None:
@@ -42,11 +50,11 @@ class CustomCallback(BaseCallback):
         self.logger.record('cache/top_100_avg', self.cache.top_k_average(100))
 
     def save_checkpoint(self):
-        path = os.path.join(self.save_path, f"{self.name_prefix}_{self.num_timesteps}_steps")
+        path = os.path.join(self.save_path, f'{self.name_prefix}_{self.env_name}_{self.timestamp}', f'{self.name_prefix}_{self.num_timesteps}_steps')
         self.model.save(path)
         self.cache.save(path + '_cache.json')
         if self.verbose > 1:
-            print(f"Saving model checkpoint to {path}")
+            print(f'Saving model checkpoint to {path}')
 
     def show_top_alphas(self):
         if self.verbose > 0:
@@ -111,6 +119,7 @@ if __name__ == '__main__':
         target=target,
         device=device
     )
+    ev.cache.preload('./logs/maskable_ppo_demo/maskable_ppo_500000_steps_cache.json')
     env = AlphaEnv(ev)
 
     checkpoint_callback = CustomCallback(
@@ -118,6 +127,7 @@ if __name__ == '__main__':
         show_freq=10000,
         save_path='./logs/',
         name_prefix='maskable_ppo',
+        timestamp=None,
         verbose=1
     )
 
