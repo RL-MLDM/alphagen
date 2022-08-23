@@ -60,7 +60,7 @@ class LRUCache:
 
     def save(self, path: str):
         with open(path, 'w', encoding='utf-8') as f:
-            json.dump({'valid': self.cache_valid, 'nan': self.cache_nan}, f, ensure_ascii=False, indent=4)
+            json.dump({'valid': self.cache_valid, 'nan': self.cache_nan}, f, ensure_ascii=False, indent=False)
 
     def preload(self, path: str):
         with open(path, 'r', encoding='utf-8') as f:
