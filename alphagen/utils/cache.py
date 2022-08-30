@@ -52,7 +52,7 @@ class LRUCache:
         else:
             return LRUCACHE_NOT_FOUND
 
-    def put(self, key: str, value: int) -> None:
+    def put(self, key: str, value: float) -> None:
         if value != value:  # NaN
             self._put_nan(key)
         else:
@@ -68,7 +68,7 @@ class LRUCache:
             self.preload_valid = preload['valid']
             self.preload_nan = preload['nan']
 
-    def _put_valid(self, key: str, value: int) -> None:
+    def _put_valid(self, key: str, value: float) -> None:
         self.cache_valid[key] = value
         self.cache_valid.move_to_end(key)
         if len(self.cache_valid) > self.capacity:
