@@ -26,7 +26,6 @@ class CustomCallback(BaseCallback):
         self.show_freq = show_freq
         self.save_path = save_path
         self.name_prefix = name_prefix
-        self.env_name = 'AlphaGen-v0'
 
         if timestamp is None:
             self.timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -46,12 +45,12 @@ class CustomCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self.logger.record('cache/size', len(self.cache))
-        self.logger.record('cache/gt_0.03', self.cache.greater_than_count(0.03))
+        self.logger.record('cache/gt_0.05', self.cache.greater_than_count(0.05))
         self.logger.record('cache/top_1%', self.cache.quantile(0.99))
         self.logger.record('cache/top_100_avg', self.cache.top_k_average(100))
 
     def save_checkpoint(self):
-        path = os.path.join(self.save_path, f'{self.name_prefix}_{self.env_name}_{self.timestamp}', f'{self.name_prefix}_{self.num_timesteps}_steps')
+        path = os.path.join(self.save_path, f'{self.name_prefix}_{self.timestamp}', f'{self.num_timesteps}_steps')
         self.model.save(path)
         self.cache.save(path + '_cache.json')
         if self.verbose > 1:
@@ -69,9 +68,10 @@ class CustomCallback(BaseCallback):
 
 
 if __name__ == '__main__':
-    reseed_everything(0)
+    SEED = 0
+    reseed_everything(SEED)
 
-    device = torch.device("cpu")
+    device = torch.device('cuda:0')
     csi300_2016 = ZZ300_2016
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
@@ -81,17 +81,20 @@ if __name__ == '__main__':
         start_time='2016-01-01',
         end_time='2018-12-31',
         target=target,
-        device=device
+        device=device,
     )
-    ev.cache.preload('./logs/maskable_ppo_demo/maskable_ppo_500000_steps_cache.json')
+    ev.cache.preload('/DATA/xuehy/preload/zz300_static_20160101_20181231.json')
     env = AlphaEnv(ev)
+
+    NAME_PREFIX = f'maskable_ppo_seed{SEED}'
+    TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
         save_freq=10000,
         show_freq=10000,
         save_path='./logs/',
-        name_prefix='maskable_ppo',
-        timestamp=None,
+        name_prefix=NAME_PREFIX,
+        timestamp=TIMESTAMP,
         verbose=1
     )
 
@@ -101,6 +104,12 @@ if __name__ == '__main__':
         gamma=1.,
         ent_coef=0.02,
         batch_size=128,
+        tensorboard_log=f'/DATA/xuehy/tb_logs/maskable_ppo',
+        device=device,
         verbose=1
     )
-    model.learn(total_timesteps=2000000, callback=checkpoint_callback)
+    model.learn(
+        total_timesteps=2000000,
+        callback=checkpoint_callback,
+        tb_log_name=f'{NAME_PREFIX}_{TIMESTAMP}'
+    )
