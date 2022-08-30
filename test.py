@@ -27,14 +27,19 @@ if __name__ == '__main__':
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
     ev = QLibEvaluation(
-        instrument=csi100_2018,
-        start_time='2018-01-01',
+        instrument='csi300',
+        start_time='2016-01-01',
         end_time='2018-12-31',
         target=target,
         device=device
     )
     env = AlphaEnv(ev, print_expr=True)
 
-    model = MaskablePPO.load('logs/maskable_ppo_1000000_steps')
-    mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=50)
+    model = MaskablePPO.load('logs/maskable_ppo_250000_steps')
+    mean_reward, std_reward = evaluate_policy(
+        model,
+        env,
+        n_eval_episodes=50,
+        deterministic=False,
+    )
     print(mean_reward, std_reward)
