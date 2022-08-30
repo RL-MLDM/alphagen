@@ -18,7 +18,7 @@ class StockData:
     _qlib_initialized: bool = False
 
     def __init__(self,
-                 instrument: str,
+                 instrument: Union[str, List[str]],
                  start_time: str,
                  end_time: str,
                  max_backtrack_days: int = 100,
