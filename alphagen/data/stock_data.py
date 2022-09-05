@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, ClassVar
 from enum import IntEnum
 import numpy as np
 import pandas as pd
@@ -15,19 +15,21 @@ class FeatureType(IntEnum):
 
 
 class StockData:
-    _qlib_initialized: bool = False
+    _qlib_initialized: ClassVar[bool] = False
 
-    def __init__(self,
-                 instrument: str,
-                 start_time: str,
-                 end_time: str,
-                 max_backtrack_days: int = 100,
-                 max_future_days: int = 30,
-                 features: Optional[List[FeatureType]] = None,
-                 device: torch.device = torch.device("cpu")) -> None:
-        self._init_qlib()
+    def __init__(
+        self,
+        instruments: List[str],
+        start_time: str,
+        end_time: str,
+        max_backtrack_days: int = 100,
+        max_future_days: int = 30,
+        features: Optional[List[FeatureType]] = None,
+        device: torch.device = torch.device("cpu")
+    ) -> None:
+        self.init_qlib()
 
-        self._instrument = instrument
+        self._instruments = instruments
         self.max_backtrack_days = max_backtrack_days
         self.max_future_days = max_future_days
         self._start_time = start_time
@@ -37,18 +39,40 @@ class StockData:
         self.data, self._dates, self._stock_ids = self._get_data()
 
     @classmethod
-    def _init_qlib(cls) -> None:
+    def list_instruments(
+        cls,
+        instruments: str,
+        start_time: str,
+        end_time: str,
+        backtrack_days: int = 100,
+        future_days: int = 30
+    ) -> List[str]:
+        cls.init_qlib()
+        from qlib.data import D
+        cal: np.ndarray = D.calendar()
+        start_index = cal.searchsorted(pd.Timestamp(start_time))    # type: ignore
+        end_index = cal.searchsorted(pd.Timestamp(end_time))        # type: ignore
+        real_start_time = cal[start_index - backtrack_days]
+        if cal[end_index] != pd.Timestamp(end_time):
+            end_index -= 1
+        real_end_time = cal[end_index + future_days]
+        inst = D.instruments(market=instruments)
+        return D.list_instruments(inst, real_start_time, real_end_time, as_list=True)
+
+    @classmethod
+    def init_qlib(cls, data_provider_uri: Optional[str] = None) -> None:
         if cls._qlib_initialized:
             return
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+        if data_provider_uri is None:
+            data_provider_uri = "~/.qlib/qlib_data/cn_data"
+        qlib.init(provider_uri=data_provider_uri, region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
         # This evaluates an expression on the data and returns the dataframe
         # It might throw on illegal expressions like "Ref(constant, dtime)"
-        from qlib.data.dataset.loader import QlibDataLoader
         from qlib.data import D
         if not isinstance(exprs, list):
             exprs = [exprs]
@@ -59,13 +83,13 @@ class StockData:
         if cal[end_index] != pd.Timestamp(self._end_time):
             end_index -= 1
         real_end_time = cal[end_index + self.max_future_days]
-        return (QlibDataLoader(config=exprs)    # type: ignore
-                .load(self._instrument, real_start_time, real_end_time))
+        return D.features(self._instruments, exprs,
+                          start_time=real_start_time, end_time=real_end_time)
 
     def _get_data(self) -> Tuple[torch.Tensor, pd.Index, pd.Index]:
         features = ['$' + f.name.lower() for f in self._features]
         df = self._load_exprs(features)
-        df = df.stack().unstack(level=1)
+        df = df.stack().unstack(level=0)
         dates = df.index.levels[0]                                      # type: ignore
         stock_ids = df.columns
         values = df.values
@@ -82,9 +106,11 @@ class StockData:
     def n_days(self) -> int:
         return self.data.shape[0] - self.max_backtrack_days - self.max_future_days
 
-    def make_dataframe(self,
-                       data: Union[torch.Tensor, List[torch.Tensor]],
-                       columns: Optional[List[str]] = None) -> pd.DataFrame:
+    def make_dataframe(
+        self,
+        data: Union[torch.Tensor, List[torch.Tensor]],
+        columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
         """
         Parameters:
         - `data`: a tensor of size `(n_days, n_stocks[, n_columns])`, or

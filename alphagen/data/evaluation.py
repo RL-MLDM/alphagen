@@ -5,38 +5,36 @@ from plotly.graph_objs._figure import Figure
 from qlib.data.dataset.loader import QlibDataLoader
 
 from alphagen.data.expression import *
-from alphagen.data.stock_data import StockData
 from alphagen.utils.correlation import batch_spearmanr
 
 
 class Evaluation:
-    instrument: str
+    instruments: List[str]
     start_time: str
     end_time: str
 
     def __init__(self,
-                 instrument: str,
+                 instruments: List[str],
                  start_time: str, end_time: str,
                  target: Expression,
                  device: torch.device = torch.device("cpu")):
-        self.data = StockData(instrument, start_time, end_time, device=device)
+        self.data = StockData(instruments, start_time, end_time, device=device)
         self._target = target.evaluate(self.data)
 
-        self.instrument = instrument
+        self.instruments = instruments
         self.start_time = start_time
         self.end_time = end_time
 
     def _load(self, expr: str) -> pd.DataFrame:
         return (QlibDataLoader(config={"feature": [expr]})      # type: ignore
-                .load(self.instrument, self.start_time, self.end_time))
+                .load(self.instruments, self.start_time, self.end_time))
 
     def evaluate(self, expr: Expression) -> float:
         try:
             factor = expr.evaluate(self.data)
         except OutOfDataRangeError:
             return -1.
-        target = self._target.clone()
-        corrs = batch_spearmanr(factor, target)
+        corrs = batch_spearmanr(factor, self._target)
         return corrs.mean().item()
 
     def performance_graph(self, expr: Expression) -> Figure:
@@ -58,5 +56,6 @@ if __name__ == '__main__':
     target = Ref(close, -20) / close - 1
     expr = Ref(abs(low), 10) + high / close
 
-    ev = Evaluation('csi300', '2016-01-01', '2018-12-31', target)
+    inst = StockData.list_instruments("csi300", "2016-01-01", "2016-01-01", 0, 0)
+    ev = Evaluation(inst, '2016-01-01', '2018-12-31', target)
     print(ev.evaluate(expr))

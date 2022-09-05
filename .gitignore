@@ -4,4 +4,7 @@ __pycache__
 .DS_STORE
 playground.ipynb
 playground.py
+data/
 out/
+get_baostock_data.ipynb
+get_baostock_data.py

@@ -12,79 +12,67 @@ from alphagen.utils import reseed_everything, batch_spearmanr
 
 class AlphaEnvCore(gym.Env):
     _eval: Evaluation
-    _max_expressions: int
-    _exprs: List[Expression]
-    _tokens: List[List[Token]]
+    _tokens: List[Token]
     _builder: ExpressionBuilder
+    _record_path: Optional[str]
 
-    def __init__(self,
-                 instrument: str,
-                 start_time: str, end_time: str,
-                 *,
-                 max_expressions: int = 5,
-                 device: torch.device = torch.device("cpu")):
+    def __init__(
+        self,
+        instrument: str,
+        start_time: str, end_time: str,
+        *,
+        record_path: Optional[str] = None,
+        device: torch.device = torch.device("cpu")
+    ):
         super().__init__()
 
         close = Feature(FeatureType.CLOSE)
         target = Ref(close, -20) / close - 1
 
-        self._eval = Evaluation(instrument, start_time, end_time, target, device)
+        inst = StockData.list_instruments(instrument, start_time, end_time)
+        self._eval = Evaluation(inst, start_time, end_time, target, device)
+        self._record_path = record_path
         self._device = device
-        self._max_expressions = max_expressions
 
-    def reset(self, *,
-              seed: Optional[int] = None,
-              return_info: bool = False,
-              options: Optional[dict] = None) -> Tuple[List[List[Token]], dict]:
+    def reset(
+        self, *,
+        seed: Optional[int] = None,
+        return_info: bool = False,
+        options: Optional[dict] = None
+    ) -> Tuple[List[Token], dict]:
         reseed_everything(seed)
         self._exprs = []
-        self._tokens = [[BEG_TOKEN]]
+        self._tokens = [BEG_TOKEN]
         self._builder = ExpressionBuilder()
         return self._tokens, self._valid_action_types()
 
-    def step(self, action: Token) -> Tuple[List[List[Token]], float, bool, dict]:
+    def step(self, action: Token) -> Tuple[List[Token], float, bool, dict]:
         if (isinstance(action, SequenceIndicatorToken) and
                 action.indicator == SequenceIndicatorType.SEP):
             reward = self._evaluate()
-            done = reward < 0 or len(self._exprs) == self._max_expressions
-        else:
-            self._tokens[0].append(action)
+            done = True
+        elif len(self._tokens) < MAX_EXPR_LENGTH:
+            self._tokens.append(action)
             self._builder.add_token(action)
-            if len(self._tokens[0]) < MAX_EXPR_LENGTH:
-                reward = 0.0
-                done = False
-            else:
-                reward = self._evaluate()
-                done = True
+            done = False
+            reward = 0.0
+        else:
+            done = True
+            reward = self._evaluate() if self._builder.is_valid() else -1.0
+        if math.isnan(reward):
+            reward = -1
         return self._tokens, reward, done, self._valid_action_types()
 
+    def _maybe_record_expr(self, expr: Expression, score: float):
+        if self._record_path is not None:
+            with open(self._record_path, "a") as f:
+                f.write(f"{score}\t{expr}\n")
+
     def _evaluate(self) -> float:
-        if not self._builder.is_valid():
-            self._tokens.append([])
-            self._tokens[0] = [BEG_TOKEN]   # type: ignore (Pylance bug workaround)
-            self._builder = ExpressionBuilder()
-            return -1.0
-
-        data = self._eval.data
-        expr = self._builder.get_tree()
-        self._tokens.append(self._tokens[0])
-        self._tokens[0] = [BEG_TOKEN]       # type: ignore (Pylance bug workaround)
-        self._builder = ExpressionBuilder()
-
-        ic = self._eval.evaluate(expr)
-        max_corr = 0.0
-        for e in self._exprs:
-            try:
-                corrs = batch_spearmanr(expr.evaluate(data), e.evaluate(data))
-            except OutOfDataRangeError:
-                continue
-            corr = corrs.mean().item()
-            max_corr = max(max_corr, corr)
-        self._exprs.append(expr)
-
-        discount = 1.0 if ic <= 0 else 1 - max_corr
-        reward = ic * discount
-        return -1.0 if math.isnan(reward) else reward
+        expr: Expression = self._builder.get_tree()
+        score = self._eval.evaluate(expr)
+        self._maybe_record_expr(expr, score)
+        return score
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)

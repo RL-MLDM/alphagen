@@ -2,6 +2,7 @@ import gym
 import gym.spaces
 
 from torch import nn
+import torch.nn.functional as F
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from alphagen.models.model import PositionalEncoding
@@ -14,7 +15,6 @@ class TransformerSharedNet(BaseFeaturesExtractor):
         self,
         observation_space: gym.Space,
         n_encoder_layers: int,
-        n_decoder_layers: int,
         d_model: int,
         n_head: int,
         d_ffn: int,
@@ -33,33 +33,25 @@ class TransformerSharedNet(BaseFeaturesExtractor):
         self._token_emb = nn.Embedding(n_actions + 1, d_model, 0)   # Last one is [BEG]
         self._pos_enc = PositionalEncoding(d_model).to(device)
 
-        self._transformer = nn.Transformer(
-            d_model=d_model, nhead=n_head,
-            num_encoder_layers=n_encoder_layers,
-            num_decoder_layers=n_decoder_layers,
-            dim_feedforward=d_ffn,
-            dropout=dropout,
-            batch_first=True,
-            device=device
+        self._transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                d_model=d_model, nhead=n_head,
+                dim_feedforward=d_ffn, dropout=dropout,
+                activation=lambda x: F.leaky_relu(x),               # type: ignore
+                batch_first=True, device=device
+            ),
+            num_layers=n_encoder_layers,
+            norm=nn.LayerNorm(d_model, eps=1e-5, device=device)
         )
 
     def forward(self, obs: Tensor) -> Tensor:
-        current_seq_len = (obs[0] == self._n_actions).nonzero()[1].item()   # Find 2nd [BEG]
-        emb = self._token_emb(obs.long())                           # (bs, len, d_model)
-        src = emb[:, current_seq_len:]
-        tgt = emb[:, :current_seq_len]
+        bs, seqlen = obs.shape
+        beg = torch.full((bs, 1), fill_value=self._n_actions, dtype=torch.long, device=obs.device)
+        obs = torch.cat((beg, obs.long()), dim=1)
         pad_mask = obs == 0
-        src_pad_mask = pad_mask[:, current_seq_len:]
-        tgt_pad_mask = pad_mask[:, :current_seq_len]
-        src = self._pos_enc(src)
-        tgt = self._pos_enc(tgt)
-        res = self._transformer(                                    # (bs, tgt_len, d_model)
-            src, tgt,
-            src_key_padding_mask=src_pad_mask,
-            tgt_key_padding_mask=tgt_pad_mask,
-            memory_key_padding_mask=src_pad_mask
-        )
-        return res.mean(dim=1)                                      # (bs, d_model)
+        src = self._pos_enc(self._token_emb(obs))
+        res = self._transformer(src, src_key_padding_mask=pad_mask)
+        return res.mean(dim=1)
 
 
 class Decoder(BaseFeaturesExtractor):

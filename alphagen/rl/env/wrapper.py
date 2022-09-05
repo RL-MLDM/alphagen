@@ -2,8 +2,6 @@ import gym
 import gym.spaces
 import numpy as np
 
-from sb3_contrib.common.wrappers import ActionMasker
-
 from alphagen.config import *
 from alphagen.data.tokens import *
 from alphagen.rl.env.core import AlphaEnvCore
@@ -44,8 +42,7 @@ def action2token(action_raw: int) -> Token:
 
 
 class AlphaEnvWrapper(gym.Wrapper):
-    _current: int
-    _previous: int
+    _ptr: int
     state: np.ndarray
     env: AlphaEnvCore
     action_space: gym.spaces.Discrete
@@ -55,27 +52,19 @@ class AlphaEnvWrapper(gym.Wrapper):
         super().__init__(env)
         self.action_space = gym.spaces.Discrete(SIZE_ACTION)
         self.observation_space = gym.spaces.Box(
-            low=0, high=SIZE_ALL-1, shape=(MAX_EPISODE_LENGTH, ), dtype=np.uint8)
+            low=0, high=SIZE_ALL-1, shape=(MAX_EXPR_LENGTH, ), dtype=np.uint8)
 
     def reset(self, **kwargs) -> np.ndarray:
-        self._current = 1
-        self._previous = MAX_EXPR_LENGTH + 1
-        self.state = np.zeros(MAX_EPISODE_LENGTH, dtype=np.uint8)
-        self.state[0] = self.state[MAX_EXPR_LENGTH] = OFFSET_SEP + 1    # [BEG]
+        self._ptr = 0
+        self.state = np.zeros(MAX_EXPR_LENGTH, dtype=np.uint8)
         self.env.reset()
         return self.state
 
     def step(self, action: int):
-        observation, reward, done, info = self.env.step(self.action(action))
-        self.state[self._current] = action + 1
-        if len(observation[0]) == 1:
-            dst_slice = slice(self._previous, self._previous + MAX_EXPR_LENGTH - 1)
-            self.state[dst_slice] = self.state[1:MAX_EXPR_LENGTH]
-            self.state[1:MAX_EXPR_LENGTH].fill(0)
-            self._previous += self._current
-            self._current = 1
-        elif not done:
-            self._current += 1
+        _, reward, done, info = self.env.step(self.action(action))
+        if not done:
+            self.state[self._ptr] = action + 1
+            self._ptr += 1
         return self.state, self.reward(reward), done, info
 
     def action(self, action: int) -> Token:
@@ -84,7 +73,7 @@ class AlphaEnvWrapper(gym.Wrapper):
     def reward(self, reward: float) -> float:
         return reward + REWARD_PER_STEP
 
-    def valid_action_mask(self) -> np.ndarray:
+    def action_masks(self) -> np.ndarray:
         res = np.zeros(SIZE_ACTION, dtype=bool)
         valid = self.env.valid_action_types()
         for i in range(OFFSET_OP, OFFSET_OP + SIZE_OP):
@@ -105,8 +94,7 @@ class AlphaEnvWrapper(gym.Wrapper):
 
 
 def AlphaEnv(*args, **kwargs):
-    return ActionMasker(AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs)),
-                        lambda env: env.valid_action_mask())    # type: ignore
+    return AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs))
 
 
 if __name__ == '__main__':
