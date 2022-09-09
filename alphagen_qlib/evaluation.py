@@ -1,5 +1,6 @@
 from typing import Union, List
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -29,23 +30,56 @@ class QLibEvaluation(Evaluation):
         self.end_time = end_time
 
         self.cache = LRUCache(100000)
+        self.visited_1 = np.zeros_like(self._target.cpu())
+        self.sum_1 = 0
+        self.visited_0 = np.zeros_like(self._target.cpu())
+        self.sum_0 = 0
 
-    def evaluate(self, expr: Expression) -> float:
+    def evaluate(self,
+                 expr: Expression,
+                 use_curiosity=True,
+                 print_expr: bool = True,
+                 add_noise: bool = False,
+                 ) -> float:
         key = str(expr)
-        existing_val = self.cache.get(key)
-        if existing_val != LRUCACHE_NOT_FOUND:
-            return existing_val
-
         try:
             factor = expr.evaluate(self._data)
-            target = self._target.clone()
-            corrs = batch_spearman(factor, target)
-            ret = corrs.mean().item()
-        except OutOfDataRangeError:
-            ret = -1.
+            if add_noise:
+                factor += 1e-6 * torch.randn_like(factor)
+            corrs = batch_spearman(factor, self._target)
+            ic = corrs.mean().item()
 
-        self.cache.put(key, ret)
-        return ret
+            if np.isnan(ic):
+                raise ValueError(f'Nan factor: {key}')
+            factor = factor.cpu().numpy()
+            median = np.nanmedian(factor, axis=1, keepdims=True)
+            mask_1, mask_0 = np.nan_to_num(factor >= median), np.nan_to_num(factor < median)
+
+            # if ic >= 0.:
+            weighted_count = (np.sum(self.visited_1[mask_1]) + np.sum(self.visited_0[mask_0]))
+            # else:
+            #     weighted_count = (np.sum(self.visited_1[mask_0]) + np.sum(self.visited_0[mask_1]))
+            mean_count = (self.sum_1 + self.sum_0) / 2
+            curiosity = 0.5 * (1e-4 + mean_count) / (1e-4 + weighted_count)
+            if print_expr:
+                print(key, ic, curiosity)
+
+            self.visited_1 += mask_1
+            self.sum_1 += mask_1.sum()
+            self.visited_0 += mask_0
+            self.sum_0 += mask_0.sum()
+
+            ic = abs(ic)
+            self.cache.put(key, ic)
+        except OutOfDataRangeError:
+            ic, curiosity = -1., 0.
+        except ValueError as e:
+            ic, curiosity = -1., 0.
+
+        if use_curiosity:
+            return ic + curiosity
+        else:
+            return ic
 
 
 if __name__ == '__main__':
@@ -57,22 +91,7 @@ if __name__ == '__main__':
     volume = Feature(FeatureType.VOLUME)
 
     target = Ref(close, -20) / close - 1
-    expr = Greater(Sub(Sign(Med(volume, 30)), Constant(-0.5)), Constant(-2.0))
+    expr = Ref(Greater(Greater(Constant(-30.0), high), Constant(-5.0)), 40)
 
-    ev = QLibEvaluation('csi100', '2018-01-01', '2018-12-31', target)
-    print(ev.evaluate(expr))
-
-    csi100_2018 = ['SZ000001', 'SZ000002', 'SZ000063', 'SZ000069', 'SZ000166', 'SZ000333', 'SZ000538', 'SZ000625', 'SZ000651',
-     'SZ000725', 'SZ000776', 'SZ000858', 'SZ000895', 'SZ001979', 'SZ002024', 'SZ002027', 'SZ002142', 'SZ002252',
-     'SZ002304', 'SZ002352', 'SZ002415', 'SZ002558', 'SZ002594', 'SZ002736', 'SZ002739', 'SZ002797', 'SZ300059',
-     'SH600000', 'SH600010', 'SH600011', 'SH600015', 'SH600016', 'SH600018', 'SH600019', 'SH600023', 'SH600028',
-     'SH600030', 'SH600036', 'SH600048', 'SH600050', 'SH600061', 'SH600104', 'SH600115', 'SH600276', 'SH600309',
-     'SH600340', 'SH600518', 'SH600519', 'SH600585', 'SH600606', 'SH600637', 'SH600663', 'SH600690', 'SH600703',
-     'SH600795', 'SH600837', 'SH600887', 'SH600893', 'SH600900', 'SH600919', 'SH600958', 'SH600999', 'SH601006',
-     'SH601009', 'SH601018', 'SH601088', 'SH601111', 'SH601166', 'SH601169', 'SH601186', 'SH601211', 'SH601225',
-     'SH601229', 'SH601288', 'SH601318', 'SH601328', 'SH601336', 'SH601390', 'SH601398', 'SH601601', 'SH601618',
-     'SH601628', 'SH601633', 'SH601668', 'SH601669', 'SH601688', 'SH601727', 'SH601766', 'SH601788', 'SH601800',
-     'SH601818', 'SH601857', 'SH601881', 'SH601899', 'SH601901', 'SH601985', 'SH601988', 'SH601989', 'SH601998',
-     'SH603993']
-    ev = QLibEvaluation(csi100_2018, '2018-01-01', '2018-12-31', target)
-    print(ev.evaluate(expr))
+    ev = QLibEvaluation('csi300', '2019-01-01', '2021-12-31', target)
+    print(ev.evaluate(expr, use_curiosity=False))

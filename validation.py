@@ -6,7 +6,6 @@ from alphagen.config import OPERATORS
 from alphagen.data.expression import *
 from alphagen.utils.random import reseed_everything
 from alphagen_qlib.evaluation import QLibEvaluation
-from assets import ZZ300_2019
 
 FEATURES = {
     '$open': Feature(FeatureType.OPEN),
@@ -59,20 +58,19 @@ def build_expr_tree(raw: str) -> Expression:
         return DeltaTime(int(raw))
 
 
-FILENAME = '/DATA/xuehy/preload/zz300_static_20160101_20181231.json'
-SAVE_TO = '/DATA/xuehy/preload/zz300_static_20190101_20211231.json'
+FILENAME = '/DATA/xuehy/logs/maskable_ppo_seed0_20220909103309/370000_steps_cache.json'
+SAVE_TO = '/DATA/xuehy/preload/zz300_dynamic_20190101_20211231.json'
 
 if __name__ == '__main__':
     with open(FILENAME, encoding='utf-8') as f:
         cache = json.load(f)
 
     reseed_everything(0)
-    device = torch.device("cpu")
-    csi300_2019 = ZZ300_2019
+    device = torch.device('cuda:0')
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
     ev = QLibEvaluation(
-        instrument=csi300_2019,
+        instrument='csi300',
         start_time='2019-01-01',
         end_time='2021-12-31',
         target=target,
@@ -81,12 +79,13 @@ if __name__ == '__main__':
     ev.cache.preload(SAVE_TO)
 
     keys = list(cache['valid'].keys()) + list(cache['nan'].keys())
+    # keys = ['Ref(Greater(Greater(-30.0,$high),-5.0),40)'] * 1000
     for i, key in enumerate(tqdm(keys), start=1):
         expr = build_expr_tree(key)
         assert str(expr) == key, (key, str(expr))
-        ev.evaluate(expr)
+        ev.evaluate(expr, use_curiosity=False, add_noise=False, print_expr=False)
 
         if i % 5000 == 0:
             ev.cache.save(SAVE_TO)
-
+    # print(ev.cache.cache_valid)
     ev.cache.save(SAVE_TO)

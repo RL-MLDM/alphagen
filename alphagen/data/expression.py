@@ -259,9 +259,17 @@ class Div(BinaryOperator):
 class Greater(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs.max(rhs)
 
+    @property
+    def is_featured(self):
+        return self._lhs.is_featured and self._rhs.is_featured
+
 
 class Less(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs.min(rhs)
+
+    @property
+    def is_featured(self):
+        return self._lhs.is_featured and self._rhs.is_featured
 
 
 class Ref(RollingOperator):

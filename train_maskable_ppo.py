@@ -77,7 +77,7 @@ if __name__ == '__main__':
     target = Ref(close, -20) / close - 1
 
     ev = QLibEvaluation(
-        instrument=csi300_2016,
+        instrument='csi300',
         start_time='2016-01-01',
         end_time='2018-12-31',
         target=target,

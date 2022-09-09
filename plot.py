@@ -1,8 +1,8 @@
 from matplotlib import pyplot as plt
 import json
 
-FILENAME_TRAIN = '/DATA/xuehy/preload/zz300_static_20160101_20181231.json'
-FILENAME_VALIDATION = '/DATA/xuehy/preload/zz300_static_20190101_20211231.json'
+FILENAME_TRAIN = '/DATA/xuehy/logs/maskable_ppo_seed0_20220909103309/370000_steps_cache.json'
+FILENAME_VALIDATION = '/DATA/xuehy/preload/zz300_dynamic_20190101_20211231.json'
 
 if __name__ == '__main__':
     with open(FILENAME_TRAIN, encoding='utf-8') as f:
