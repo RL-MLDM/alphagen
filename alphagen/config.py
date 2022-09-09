@@ -5,7 +5,8 @@ MAX_TOKEN_LENGTH = 20
 
 OPERATORS = [
     # Unary
-    Abs, Sign, Log,
+    Abs,  # Sign,
+    Log,
     # Binary
     Add, Sub, Mul, Div, Greater, Less,
     # Rolling

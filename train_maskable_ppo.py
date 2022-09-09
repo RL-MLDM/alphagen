@@ -78,12 +78,12 @@ if __name__ == '__main__':
 
     ev = QLibEvaluation(
         instrument='csi300',
-        start_time='2016-01-01',
+        start_time='2009-01-01',
         end_time='2018-12-31',
         target=target,
         device=device,
     )
-    ev.cache.preload('/DATA/xuehy/preload/zz300_static_20160101_20181231.json')
+    # ev.cache.preload('/DATA/xuehy/preload/zz300_static_20160101_20181231.json')
     env = AlphaEnv(ev)
 
     NAME_PREFIX = f'maskable_ppo_seed{SEED}'
@@ -102,7 +102,7 @@ if __name__ == '__main__':
         'MlpPolicy',
         env,
         gamma=1.,
-        ent_coef=0.02,
+        ent_coef=0.,
         batch_size=128,
         tensorboard_log=f'/DATA/xuehy/tb_logs/maskable_ppo',
         device=device,
