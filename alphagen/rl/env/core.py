@@ -3,15 +3,14 @@ import gym
 import math
 
 from alphagen.config import MAX_EXPR_LENGTH
-from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import ExpressionBuilder
-from alphagen.utils import reseed_everything, batch_spearmanr
+from alphagen.models.alpha_pool import AlphaPool
+from alphagen.utils import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
-    _eval: Evaluation
     _tokens: List[Token]
     _builder: ExpressionBuilder
     _record_path: Optional[str]
@@ -21,18 +20,26 @@ class AlphaEnvCore(gym.Env):
         instrument: str,
         start_time: str, end_time: str,
         *,
+        min_ic_first: float = 0.03,
+        min_ic_increment: float = 0.005,
         record_path: Optional[str] = None,
         device: torch.device = torch.device("cpu")
     ):
+        """
+        `record_path`: Where to log the results, None for disabling the log 
+        """
         super().__init__()
 
         close = Feature(FeatureType.CLOSE)
         target = Ref(close, -20) / close - 1
 
         inst = StockData.list_instruments(instrument, start_time, end_time)
-        self._eval = Evaluation(inst, start_time, end_time, target, device)
+        data = StockData(inst, start_time, end_time, device=device)
         self._record_path = record_path
         self._device = device
+        self._pool = AlphaPool(data, target, record_path)
+        self._min_ic_first = min_ic_first
+        self._min_ic_increment = min_ic_increment
 
     def reset(
         self, *,
@@ -63,16 +70,12 @@ class AlphaEnvCore(gym.Env):
             reward = -1
         return self._tokens, reward, done, self._valid_action_types()
 
-    def _maybe_record_expr(self, expr: Expression, score: float):
-        if self._record_path is not None:
-            with open(self._record_path, "a") as f:
-                f.write(f"{score}\t{expr}\n")
-
     def _evaluate(self) -> float:
         expr: Expression = self._builder.get_tree()
-        score = self._eval.evaluate(expr)
-        self._maybe_record_expr(expr, score)
-        return score
+        return self._pool.try_new_expr(
+            expr,
+            self._min_ic_first, self._min_ic_increment
+        )
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)

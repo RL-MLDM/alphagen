@@ -54,6 +54,45 @@ class TransformerSharedNet(BaseFeaturesExtractor):
         return res.mean(dim=1)
 
 
+class LSTMSharedNet(BaseFeaturesExtractor):
+    def __init__(
+        self,
+        observation_space: gym.Space,
+        n_layers: int,
+        d_model: int,
+        dropout: float,
+        device: torch.device
+    ):
+        super().__init__(observation_space, d_model)
+
+        assert isinstance(observation_space, gym.spaces.Box)
+        n_actions = observation_space.high[0] + 1                   # type: ignore
+
+        self._device = device
+        self._d_model = d_model
+        self._n_actions: float = n_actions
+
+        self._token_emb = nn.Embedding(n_actions + 1, d_model, 0)   # Last one is [BEG]
+        self._pos_enc = PositionalEncoding(d_model).to(device)
+
+        self._lstm = nn.LSTM(
+            input_size=d_model,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=dropout
+        )
+
+    def forward(self, obs: Tensor) -> Tensor:
+        bs, seqlen = obs.shape
+        beg = torch.full((bs, 1), fill_value=self._n_actions, dtype=torch.long, device=obs.device)
+        obs = torch.cat((beg, obs.long()), dim=1)
+        real_len = (obs != 0).sum(1).max()
+        src = self._pos_enc(self._token_emb(obs))
+        res = self._lstm(src[:,:real_len])[0]
+        return res.mean(dim=1)
+
+
 class Decoder(BaseFeaturesExtractor):
     def __init__(
         self,

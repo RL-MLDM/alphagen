@@ -38,6 +38,9 @@ class StockData:
         self._device = device
         self.data, self._dates, self._stock_ids = self._get_data()
 
+    @property
+    def device(self) -> torch.device: return self._device
+
     @classmethod
     def list_instruments(
         cls,
