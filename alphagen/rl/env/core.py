@@ -2,12 +2,12 @@ from typing import Tuple, Optional
 import gym
 import math
 
-from alphagen.config import MAX_TOKEN_LENGTH
-from alphagen.data.evaluation import Evaluation
+from alphagen.config import MAX_EXPR_LENGTH
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
-from alphagen.data.tree import AlphaTreeBuilder
-from alphagen.utils.random import reseed_everything
+from alphagen.data.tree import ExpressionBuilder
+from alphagen.models.alpha_pool import AlphaPool
+from alphagen.utils import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
@@ -25,22 +25,28 @@ class AlphaEnvCore(gym.Env):
         self.eval = ev
         self._print_expr = print_expr
         self._device = device
+        self._pool = AlphaPool(data, target, record_path)
+        self._min_ic_first = min_ic_first
+        self._min_ic_increment = min_ic_increment
 
-    def reset(self, *,
-              seed: Optional[int] = None,
-              return_info: bool = False,
-              options: Optional[dict] = None) -> Tuple[List[Token], dict]:
+    def reset(
+        self, *,
+        seed: Optional[int] = None,
+        return_info: bool = False,
+        options: Optional[dict] = None
+    ) -> Tuple[List[Token], dict]:
         reseed_everything(seed)
-        self._tokens = [SequenceIndicatorToken(SequenceIndicatorType.BEG)]
-        self._builder = AlphaTreeBuilder()
+        self._exprs = []
+        self._tokens = [BEG_TOKEN]
+        self._builder = ExpressionBuilder()
         return self._tokens, self._valid_action_types()
 
     def step(self, action: Token) -> Tuple[List[Token], float, bool, dict]:
         if (isinstance(action, SequenceIndicatorToken) and
                 action.indicator == SequenceIndicatorType.SEP):
-            done = True
             reward = self._evaluate()
-        elif len(self._tokens) < MAX_TOKEN_LENGTH:
+            done = True
+        elif len(self._tokens) < MAX_EXPR_LENGTH:
             self._tokens.append(action)
             self._builder.add_token(action)
             done = False

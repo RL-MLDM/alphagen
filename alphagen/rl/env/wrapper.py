@@ -43,9 +43,11 @@ def action2token(action_raw: int) -> Token:
 
 
 class AlphaEnvWrapper(gym.Wrapper):
-    counter: int
+    _ptr: int
     state: np.ndarray
     env: AlphaEnvCore
+    action_space: gym.spaces.Discrete
+    observation_space: gym.spaces.Box
 
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
@@ -59,7 +61,7 @@ class AlphaEnvWrapper(gym.Wrapper):
         return self.state
 
     def step(self, action: int):
-        observation, reward, done, info = self.env.step(self.action(action))
+        _, reward, done, info = self.env.step(self.action(action))
         if not done:
             self.state[self.counter * SIZE_ACTION + action] = 1
             self.counter += 1
@@ -76,18 +78,18 @@ class AlphaEnvWrapper(gym.Wrapper):
         valid = self.env.valid_action_types()
         for i in range(OFFSET_OP, OFFSET_OP + SIZE_OP):
             if valid['op'][OPERATORS[i - OFFSET_OP].category_type()]:
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][1]:  # FEATURE
             for i in range(OFFSET_FEATURE, OFFSET_FEATURE + SIZE_FEATURE):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][2]:  # CONSTANT
             for i in range(OFFSET_CONSTANT, OFFSET_CONSTANT + SIZE_CONSTANT):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][3]:  # DELTA_TIME
             for i in range(OFFSET_DELTA_TIME, OFFSET_DELTA_TIME + SIZE_DELTA_TIME):
-                res[i-1] = True
+                res[i - 1] = True
         if valid['select'][4]:  # SEP
-            res[OFFSET_SEP-1] = True
+            res[OFFSET_SEP - 1] = True
         return res
 
 

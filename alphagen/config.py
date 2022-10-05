@@ -1,7 +1,9 @@
+from typing import List, Type
 from alphagen.data.expression import *
 
 
-MAX_TOKEN_LENGTH = 20
+MAX_EXPR_LENGTH = 20
+MAX_EPISODE_LENGTH = 256
 
 OPERATORS = [
     # Unary

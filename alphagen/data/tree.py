@@ -2,7 +2,7 @@ from alphagen.data.expression import *
 from alphagen.data.tokens import *
 
 
-class AlphaTreeBuilder:
+class ExpressionBuilder:
     stack: List[Expression]
 
     def __init__(self):
@@ -12,11 +12,11 @@ class AlphaTreeBuilder:
         if len(self.stack) == 1:
             return self.stack[0]
         else:
-            raise InvalidTreeException(f"Expected only one tree, got {len(self.stack)}")
+            raise InvalidExpressionException(f"Expected only one tree, got {len(self.stack)}")
 
     def add_token(self, token: Token):
         if not self.validate(token):
-            raise InvalidTreeException(f"Token {token} not allowed here, stack: {self.stack}.")
+            raise InvalidExpressionException(f"Token {token} not allowed here, stack: {self.stack}.")
         if isinstance(token, OperatorToken):
             n_args: int = token.operator.n_args()
             children = []
@@ -84,7 +84,7 @@ class AlphaTreeBuilder:
         return not (len(self.stack) >= 1 and isinstance(self.stack[-1], DeltaTime))
 
 
-class InvalidTreeException(ValueError):
+class InvalidExpressionException(ValueError):
     pass
 
 
@@ -100,7 +100,7 @@ if __name__ == '__main__':
         OperatorToken(Add),
     ]
 
-    builder = AlphaTreeBuilder()
+    builder = ExpressionBuilder()
     for token in tokens:
         builder.add_token(token)
 
