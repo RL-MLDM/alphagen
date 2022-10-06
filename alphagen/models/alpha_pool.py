@@ -1,133 +1,204 @@
-from copy import deepcopy
-from typing import List, Optional
+from itertools import count
+from typing import List, Optional, Tuple
 
+import numpy as np
 import torch
-from torch import Tensor, nn, optim
+from torch import Tensor
 
-from alphagen.data.expression import Expression, OutOfDataRangeError
+from alphagen.data.expression import Expression
 from alphagen.utils.correlation import batch_pearsonr
 from alphagen.utils.pytorch_utils import masked_mean_std
 from alphagen_qlib.stock_data import StockData
 
 
 class AlphaPool:
-    def __init__(
-        self,
-        stock_data: StockData,
-        target: Expression,
-        record_path: Optional[str] = None,
-    ) -> None:
-        self._data = stock_data
-        self._record_path = record_path
-        self._target_expr = target
-        self._target = self._normalized_eval(target)
-        self._exprs: List[Expression] = []
-        self._evals: Tensor = self._zero_eval()
-        self._model: _LinearModel = _LinearModel(self.device)
-        self._current_ic: float = 0.
+    def __init__(self,
+                 capacity: int,
+                 stock_data: StockData,
+                 target: Expression,
+                 ic_lower_bound: float,
+                 ic_min_increment: float
+                 ):
+        self.capacity = capacity
+        self.size = 0
+
+        self.data = stock_data
+        self.target = self._normalize_by_day(target.evaluate(self.data))
+
+        self.exprs: List[Optional[Expression]] = [None] * (capacity + 1)
+        self.values: List[Optional[Tensor]] = [None] * (capacity + 1)
+        self.ics_ret: np.ndarray = np.zeros(capacity + 1)
+        self.ics_mut: np.ndarray = np.identity(capacity + 1)
+        self.weights: np.ndarray = np.zeros(capacity + 1)
+        self.best_ic_ret: float = -1.
+
+        self.ic_lower_bound = ic_lower_bound
+        self.ic_min_increment = ic_min_increment
 
     @property
-    def device(self) -> torch.device: return self._data.device
+    def device(self) -> torch.device:
+        return self.data.device
+
+    def try_new_expr(self, expr: Expression) -> float:
+        value = self._normalize_by_day(expr.evaluate(self.data))
+        ic_ret, ic_mut = self._calc_ics(value,
+                                        ic_ret_threshold=self.ic_lower_bound,
+                                        ic_mut_threshold=0.99
+                                        )
+        if ic_ret is None or ic_mut is None:
+            return 0.
+
+        self._add_factor(expr, value, ic_ret, ic_mut)
+
+        self.optimize(alpha=5e-3, lr=5e-4, n_iter=500)
+        self._pop()
+
+        new_ic_ret = self.evaluate_ensemble()
+        increment = new_ic_ret - self.best_ic_ret
+        if increment > 0:
+            self.best_ic_ret = new_ic_ret
+        return increment
+
+    def force_load_exprs(self, exprs: List[Expression]) -> None:
+        for expr in exprs:
+            value = self._normalize_by_day(expr.evaluate(self.data))
+            ic_ret, ic_mut = self._calc_ics(value,
+                                            ic_ret_threshold=None,
+                                            ic_mut_threshold=None
+                                            )
+            assert ic_ret is not None and ic_mut is not None
+            self._add_factor(expr, value, ic_ret, ic_mut)
+            assert self.size <= self.capacity
+        self.optimize(alpha=5e-3, lr=5e-4, n_iter=100)
+
+    def optimize(self, alpha, lr, n_iter) -> float:
+        ics_ret = torch.from_numpy(self.ics_ret[:self.size]).to(self.device)
+        ics_mut = torch.from_numpy(self.ics_mut[:self.size, :self.size]).to(self.device)
+        weights = torch.from_numpy(self.weights[:self.size]).to(self.device).requires_grad_()
+        optim = torch.optim.Adam([weights], lr=lr)
+
+        loss_ic_min = 1e9 + 7  # An arbitrary big value
+        best_weights = weights.cpu().detach().numpy()
+        iter_cnt = 0
+        for it in count():
+            ret_ic_sum = (weights * ics_ret).sum()
+            mut_ic_sum = (torch.outer(weights, weights) * ics_mut).sum()
+            loss_ic = mut_ic_sum - 2 * ret_ic_sum + 1
+            loss_ic_curr = loss_ic.item()
+
+            loss_l1 = torch.norm(weights, p=1)
+            loss = loss_ic + alpha * loss_l1
+
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+
+            if loss_ic_min - loss_ic_curr > 1e-6:
+                iter_cnt = 0
+            else:
+                iter_cnt += 1
+
+            if loss_ic_curr < loss_ic_min:
+                best_weights = weights.cpu().detach().numpy()
+                loss_ic_min = loss_ic_curr
+
+            if iter_cnt >= n_iter or it >= 10000:
+                break
+            # if it % 100 == 0:
+            #     print('>', loss_ic.item())
+
+        self.weights[:self.size] = best_weights
+        return best_weights[-1]
+
+    def evaluate_ensemble(self) -> float:
+        with torch.no_grad():
+            ensemble_factor = self._normalize_by_day(sum(self.values[i] * self.weights[i] for i in range(self.size)))
+            ensemble_ic = batch_pearsonr(ensemble_factor, self.target).mean().item()
+            return ensemble_ic
 
     def _zero_eval(self) -> Tensor:
-        return torch.zeros(self._data.n_days, self._data.n_stocks, 1, device=self.device)
+        return torch.zeros(self.data.n_days, self.data.n_stocks, 1, device=self.device)
 
-    def _normalized_eval(self, expr: Expression) -> Tensor:
-        value = expr.evaluate(self._data)   # [days, stocks]
+    @staticmethod
+    def _normalize_by_day(value: Tensor) -> Tensor:
         mean, std = masked_mean_std(value)
         value = (value - mean[:, None]) / std[:, None]
         nan_mask = torch.isnan(value)
-        value[nan_mask] = 0.                # TODO: Is this mask really necessary?
+        value[nan_mask] = 0.
         return value
 
-    def _grow(self) -> None:
-        self._evals = torch.cat((self._evals, self._zero_eval()), dim=2)
-        self._model.extend_one()
+    def _calc_ics(self,
+                  value: Tensor,
+                  ic_ret_threshold=None,
+                  ic_mut_threshold=None
+                  ) -> Tuple[Optional[float], Optional[List[float]]]:
+        ic_ret = batch_pearsonr(value, self.target).mean().item()
+        if ic_ret_threshold is not None and ic_ret < ic_ret_threshold:
+            return None, None
 
-    def _record_expr(self, expr: Expression, score: float) -> None:
-        if self._record_path is None:
+        ic_mut = []
+        for i in range(self.size):
+            ic_mut_i = batch_pearsonr(value, self.values[i]).mean().item()
+            if ic_mut_threshold is not None and ic_mut_i > ic_mut_threshold:
+                return None, None
+            ic_mut.append(ic_mut_i)
+
+        return ic_ret, ic_mut
+
+    def _add_factor(self,
+                    expr: Expression,
+                    value: Tensor,
+                    ic_ret: float,
+                    ic_mut: List[float],
+                    ):
+        n = self.size
+        self.exprs[n] = expr
+        self.values[n] = value
+        self.ics_ret[n] = ic_ret
+        for i in range(n):
+            self.ics_mut[i][n] = self.ics_mut[n][i] = ic_mut[i]
+        self.weights[n] = ic_ret  # An arbitrary init value
+        self.size += 1
+
+    def _pop(self) -> None:
+        if self.size <= self.capacity:
             return
-        with open(self._record_path, "a") as f:
-            f.write(f"Expr: {score:.6f}\t{expr}\n")
+        idx = np.argmin(np.abs(self.weights))
+        self._swap_idx(idx, self.capacity)
+        self.size = self.capacity
 
-    def _record_pool(self) -> None:
-        if self._record_path is None:
+    def _swap_idx(self, i, j) -> None:
+        if i == j:
             return
-        ics = [batch_pearsonr(self._evals[:, :, i], self._target).mean().item()
-               for i in range(self._evals.shape[2])]
-        weights: List[float] = self._model._weights.cpu().tolist()
-        weights.append(1. - sum(weights))
-        with open(self._record_path, "a") as f:
-            f.write(f"Pool: Linear model IC = {self._current_ic:.6f}\n")
-            for i, e, w in zip(ics, self._exprs, weights):
-                f.write(f"    Singular IC = {i:.6f}, Weight = {w:.6f}, Expression: {e}\n")
-
-    def try_new_expr(
-        self,
-        expr: Expression,
-        min_ic_first: float = 0.03,
-        min_ic_increment: float = 0.005
-    ) -> float:
-        try:
-            norm_eval = self._normalized_eval(expr)
-            self._evals[:, :, -1] = norm_eval
-        except OutOfDataRangeError:
-            return -1.
-
-        if self._model._dim == 1:   # Empty pool for now
-            ic = batch_pearsonr(norm_eval, self._target).mean().item()
-            if ic < min_ic_first:
-                self._record_expr(expr, ic)
-                return ic
-        else:
-            model = deepcopy(self._model)
-            sgd = optim.SGD(model.parameters(), lr=1.)
-            prev_highest, ic = 0., self._current_ic
-            count = 0
-            while True:
-                combined = model(self._evals)
-                ic = batch_pearsonr(combined, self._target).mean()
-                (-ic).backward()
-                sgd.step()
-                sgd.zero_grad()
-                ic = ic.item()
-                if count > 100:
-                    break
-                if ic > prev_highest:
-                    if ic > prev_highest + 1e-6:
-                        count = 0
-                    prev_highest = ic
-                count += 1
-            diff = ic - self._current_ic
-            if diff < min_ic_increment:
-                self._record_expr(expr, ic)
-                return diff
-            self._model = model
-
-        self._exprs.append(expr)
-        self._grow()
-        result = ic - self._current_ic
-        self._current_ic = ic
-        self._record_pool()
-        return result
+        self.exprs[i], self.exprs[j] = self.exprs[j], self.exprs[i]
+        self.values[i], self.values[j] = self.values[j], self.values[i]
+        self.ics_ret[i], self.ics_ret[j] = self.ics_ret[j], self.ics_ret[i]
+        self.ics_mut[:, [i, j]] = self.ics_mut[:, [j, i]]
+        self.ics_mut[[i, j], :] = self.ics_mut[[j, i], :]
+        self.weights[i], self.weights[j] = self.weights[j], self.weights[i]
 
 
-class _LinearModel(nn.Module):
-    def __init__(self, device: torch.device) -> None:
-        super().__init__()
-        self._dim: int = 1
-        self._weights = nn.Parameter(torch.zeros(0, device=device))
+if __name__ == '__main__':
+    from alphagen.data.expression import *
+    data = StockData(instrument='csi300', start_time='2009-01-01', end_time='2014-12-31')
+    device = torch.device('cuda:0')
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
 
-    def forward(self, x: Tensor) -> Tensor:
-        if self._dim < 2:
-            return x
-        last = 1. - self._weights.sum()
-        all_weights = torch.cat((self._weights, last[None]))
-        return x @ all_weights
+    pool = AlphaPool(capacity=10,
+                     stock_data=data,
+                     target=target,
+                     ic_lower_bound=0.,
+                     ic_min_increment=0.)
 
-    def extend_one(self) -> None:
-        with torch.no_grad():
-            last = 1. - self._weights.sum()
-            new_weights = torch.cat((self._weights, last[None]))
-        self._weights = nn.Parameter(new_weights)
-        self._dim += 1
+    high = Feature(FeatureType.HIGH)
+    low = Feature(FeatureType.LOW)
+    close = Feature(FeatureType.CLOSE)
+    volume = Feature(FeatureType.VOLUME)
+    open_ = Feature(FeatureType.OPEN)
+    pool.force_load_exprs([high, low, volume, open_, close])
+    for i in range(10):
+        increment = pool.try_new_expr(Div(Add(Less(Div(close, Ref(close, 30)), high),
+                   Greater(Constant(5.0), Add(Add(Div(open_, Constant(-10.0)), Constant(-0.01)), Constant(0.01)))),
+               Constant(-10.0)))
+        print(increment, pool.best_ic_ret)

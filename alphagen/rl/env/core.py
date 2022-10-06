@@ -18,8 +18,9 @@ class AlphaEnvCore(gym.Env):
 
     def __init__(self,
                  ev: Evaluation,
-                 device: torch.device = torch.device("cpu"),
-                 print_expr: bool = False):
+                 device: torch.device = torch.device('cuda:0'),
+                 print_expr: bool = False
+                 ):
         super().__init__()
 
         self.eval = ev
@@ -33,7 +34,6 @@ class AlphaEnvCore(gym.Env):
         options: Optional[dict] = None
     ) -> Tuple[List[Token], dict]:
         reseed_everything(seed)
-        self._exprs = []
         self._tokens = [BEG_TOKEN]
         self._builder = ExpressionBuilder()
         return self._tokens, self._valid_action_types()
