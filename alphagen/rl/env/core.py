@@ -2,28 +2,30 @@ from typing import Tuple, Optional
 import gym
 import math
 
+import torch
+
 from alphagen.config import MAX_EXPR_LENGTH
-from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import ExpressionBuilder
+from alphagen.models.alpha_pool import AlphaPool
 from alphagen.utils import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
-    eval: Evaluation
+    pool: AlphaPool
     _tokens: List[Token]
     _builder: ExpressionBuilder
     _print_expr: bool
 
     def __init__(self,
-                 ev: Evaluation,
+                 pool: AlphaPool,
                  device: torch.device = torch.device('cuda:0'),
                  print_expr: bool = False
                  ):
         super().__init__()
 
-        self.eval = ev
+        self.pool = pool
         self._print_expr = print_expr
         self._device = device
 
@@ -59,7 +61,7 @@ class AlphaEnvCore(gym.Env):
         expr: Expression = self._builder.get_tree()
         if self._print_expr:
             print(expr)
-        return self.eval.evaluate(expr)
+        return self.pool.try_new_expr(expr)
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
@@ -74,8 +76,8 @@ class AlphaEnvCore(gym.Env):
         valid_stop = self._builder.is_valid()
 
         ret = {
-            "select": [valid_op, valid_feature, valid_const, valid_dt, valid_stop],
-            "op": {
+            'select': [valid_op, valid_feature, valid_const, valid_dt, valid_stop],
+            'op': {
                 UnaryOperator: valid_op_unary,
                 BinaryOperator: valid_op_binary,
                 RollingOperator: valid_op_rolling,
@@ -87,23 +89,26 @@ class AlphaEnvCore(gym.Env):
     def valid_action_types(self) -> dict:
         return self._valid_action_types()
 
-    def render(self, mode="human"):
+    def render(self, mode='human'):
         pass
 
 
 if __name__ == '__main__':
-    from alphagen_qlib.evaluation import QLibEvaluation
+    from alphagen_qlib.stock_data import StockData
 
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
+    device = torch.device('cuda:0')
 
-    ev = QLibEvaluation(
-        instrument='csi300',
-        start_time='2016-01-01',
-        end_time='2018-12-31',
-        target=target
-    )
-    env = AlphaEnvCore(ev)
+    data = StockData(instrument='csi300',
+                     start_time='2016-01-01',
+                     end_time='2018-12-31')
+    pool = AlphaPool(capacity=10,
+                     stock_data=data,
+                     target=target,
+                     ic_lower_bound=None,
+                     ic_min_increment=None)
+    env = AlphaEnvCore(pool=pool, device=device, print_expr=True)
 
     tokens = [
         FeatureToken(FeatureType.LOW),

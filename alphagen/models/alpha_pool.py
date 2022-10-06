@@ -16,9 +16,8 @@ class AlphaPool:
                  capacity: int,
                  stock_data: StockData,
                  target: Expression,
-                 ic_lower_bound: float,
-                 ic_min_increment: float
-                 ):
+                 ic_lower_bound: Optional[float],
+                 ic_min_increment: Optional[float]):
         self.capacity = capacity
         self.size = 0
 
@@ -43,8 +42,7 @@ class AlphaPool:
         value = self._normalize_by_day(expr.evaluate(self.data))
         ic_ret, ic_mut = self._calc_ics(value,
                                         ic_ret_threshold=self.ic_lower_bound,
-                                        ic_mut_threshold=0.99
-                                        )
+                                        ic_mut_threshold=0.99)
         if ic_ret is None or ic_mut is None:
             return 0.
 
@@ -64,8 +62,7 @@ class AlphaPool:
             value = self._normalize_by_day(expr.evaluate(self.data))
             ic_ret, ic_mut = self._calc_ics(value,
                                             ic_ret_threshold=None,
-                                            ic_mut_threshold=None
-                                            )
+                                            ic_mut_threshold=None)
             assert ic_ret is not None and ic_mut is not None
             self._add_factor(expr, value, ic_ret, ic_mut)
             assert self.size <= self.capacity
@@ -149,8 +146,7 @@ class AlphaPool:
                     expr: Expression,
                     value: Tensor,
                     ic_ret: float,
-                    ic_mut: List[float],
-                    ):
+                    ic_mut: List[float]):
         n = self.size
         self.exprs[n] = expr
         self.values[n] = value

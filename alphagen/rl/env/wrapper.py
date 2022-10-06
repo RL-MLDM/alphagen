@@ -1,10 +1,12 @@
 import gym
 import gym.spaces
 import numpy as np
+import torch
 
 from alphagen.config import *
 from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
+from alphagen.models.alpha_pool import AlphaPool
 from alphagen.rl.env.core import AlphaEnvCore
 
 SIZE_NULL = 1
@@ -93,36 +95,35 @@ class AlphaEnvWrapper(gym.Wrapper):
         return res
 
 
-def AlphaEnv(ev: Evaluation, **kwargs):
-    return AlphaEnvWrapper(AlphaEnvCore(ev, **kwargs))
+def AlphaEnv(pool: AlphaPool, **kwargs):
+    return AlphaEnvWrapper(AlphaEnvCore(pool=pool, **kwargs))
 
 
 if __name__ == '__main__':
-    from alphagen_qlib.evaluation import QLibEvaluation
-
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
+    device = torch.device('cuda:0')
 
-    ev = QLibEvaluation(
-        instrument='csi300',
-        start_time='2016-01-01',
-        end_time='2018-12-31',
-        target=target,
-        print_expr=True,
-        device=torch.device('cuda:0')
-    )
-    env = AlphaEnv(ev)
+    data = StockData(instrument='csi300',
+                     start_time='2016-01-01',
+                     end_time='2018-12-31')
+    pool = AlphaPool(capacity=10,
+                     stock_data=data,
+                     target=target,
+                     ic_lower_bound=None,
+                     ic_min_increment=None)
+    env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     state = env.reset()
     actions = [
         -1 + OFFSET_FEATURE + FeatureType.LOW,
         -1 + OFFSET_OP + 0,  # Abs
         -1 + OFFSET_DELTA_TIME + 1,
-        -1 + OFFSET_OP + 9,  # Ref
+        -1 + OFFSET_OP + 8,  # Ref
         -1 + OFFSET_FEATURE + FeatureType.HIGH,
         -1 + OFFSET_FEATURE + FeatureType.CLOSE,
-        -1 + OFFSET_OP + 6,  # Div
-        -1 + OFFSET_OP + 3,  # Add
+        -1 + OFFSET_OP + 5,  # Div
+        -1 + OFFSET_OP + 2,  # Add
         -1 + OFFSET_SEP,
     ]
     for action in actions:
