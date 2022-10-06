@@ -9,7 +9,6 @@ from alphagen.models.alpha_pool import AlphaPool
 from alphagen.rl.env.wrapper import AlphaEnv
 from alphagen.rl.policy import LSTMSharedNet
 from alphagen.utils.random import reseed_everything
-from alphagen_qlib.evaluation import QLibEvaluation
 
 
 class CustomCallback(BaseCallback):
