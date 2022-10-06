@@ -38,6 +38,13 @@ class AlphaPool:
     def device(self) -> torch.device:
         return self.data.device
 
+    @property
+    def state(self) -> dict:
+        return dict(exprs=list(self.exprs[:self.size]),
+                    ics_ret=list(self.ics_ret[:self.size]),
+                    weights=list(self.weights[:self.size]),
+                    best_ic_ret=self.best_ic_ret)
+
     def try_new_expr(self, expr: Expression) -> float:
         value = self._normalize_by_day(expr.evaluate(self.data))
         ic_ret, ic_mut = self._calc_ics(value,
@@ -112,9 +119,6 @@ class AlphaPool:
             ensemble_factor = self._normalize_by_day(sum(self.values[i] * self.weights[i] for i in range(self.size)))
             ensemble_ic = batch_pearsonr(ensemble_factor, self.target).mean().item()
             return ensemble_ic
-
-    def _zero_eval(self) -> Tensor:
-        return torch.zeros(self.data.n_days, self.data.n_stocks, 1, device=self.device)
 
     @staticmethod
     def _normalize_by_day(value: Tensor) -> Tensor:

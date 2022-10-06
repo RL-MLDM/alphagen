@@ -1,16 +1,15 @@
 import os
+from datetime import datetime
 
 from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
-from datetime import datetime
 
 from alphagen.data.expression import *
+from alphagen.models.alpha_pool import AlphaPool
 from alphagen.rl.env.wrapper import AlphaEnv
 from alphagen.rl.policy import LSTMSharedNet
-from alphagen.utils.cache import LRUCache
 from alphagen.utils.random import reseed_everything
 from alphagen_qlib.evaluation import QLibEvaluation
-from assets import ZZ300_2016
 
 
 class CustomCallback(BaseCallback):
@@ -18,10 +17,9 @@ class CustomCallback(BaseCallback):
                  save_freq: int,
                  show_freq: int,
                  save_path: str,
-                 name_prefix: str = "rl_model",
+                 name_prefix: str = 'rl_model',
                  timestamp: str = None,
-                 verbose: int = 0
-                 ):
+                 verbose: int = 0):
         super().__init__(verbose)
         self.save_freq = save_freq
         self.show_freq = show_freq
@@ -41,31 +39,35 @@ class CustomCallback(BaseCallback):
         if self.n_calls % self.save_freq == 0:
             self.save_checkpoint()
         if self.n_calls % self.show_freq == 0:
-            self.show_top_alphas()
+            self.show_pool_state()
         return True
 
     def _on_rollout_end(self) -> None:
-        self.logger.record('cache/size', len(self.cache))
-        self.logger.record('cache/gt_0.05', self.cache.greater_than_count(0.05))
-        self.logger.record('cache/top_1%', self.cache.quantile(0.99))
-        self.logger.record('cache/top_100_avg', self.cache.top_k_average(100))
+        self.logger.record('pool/size', self.pool.size)
+        self.logger.record('pool/selected', (self.pool.weights[:self.pool.size].abs() > 1e-4).sum())
+        self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
 
     def save_checkpoint(self):
         path = os.path.join(self.save_path, f'{self.name_prefix}_{self.timestamp}', f'{self.num_timesteps}_steps')
         self.model.save(path)
-        self.cache.save(path + '_cache.json')
         if self.verbose > 1:
             print(f'Saving model checkpoint to {path}')
 
-    def show_top_alphas(self):
-        if self.verbose > 0:
-            top_5 = self.cache.top_k(5)
-            for key in top_5:
-                print(key, top_5[key])
+    def show_pool_state(self):
+        state = self.pool.state
+        n = len(state['exprs'])
+        print('---------------------------------------------')
+        for i in range(n):
+            weight = state['weights'][i]
+            expr_str = str(state['exprs'][i])
+            ic_ret = state['ics_ret'][i]
+            print(f'> Alpha #{i}: {weight}, {expr_str}, {ic_ret}')
+        print(f'>> Ensemble ic_ret: {state["best_ic_ret"]}')
+        print('---------------------------------------------')
 
     @property
-    def cache(self) -> LRUCache:
-        return self.training_env.envs[0].unwrapped.eval.cache
+    def pool(self) -> AlphaPool:
+        return self.training_env.envs[0].unwrapped.pool
 
 
 if __name__ == '__main__':
@@ -73,20 +75,18 @@ if __name__ == '__main__':
     reseed_everything(SEED)
 
     device = torch.device('cuda:0')
-    csi300_2016 = ZZ300_2016
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
 
-    ev = QLibEvaluation(
-        instrument='csi300',
-        start_time='2014-01-01',
-        end_time='2018-12-31',
-        target=target,
-        print_expr=True,
-        device=device,
-    )
-    # ev.cache.preload('/DATA/xuehy/preload/zz300_static_20160101_20181231.json')
-    env = AlphaEnv(ev)
+    data = StockData(instrument='csi300',
+                     start_time='2009-01-01',
+                     end_time='2018-12-31')
+    pool = AlphaPool(capacity=20,
+                     stock_data=data,
+                     target=target,
+                     ic_lower_bound=None,
+                     ic_min_increment=None)
+    env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     NAME_PREFIX = f'maskable_ppo_seed{SEED}'
     TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')

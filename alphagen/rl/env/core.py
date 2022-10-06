@@ -2,8 +2,6 @@ from typing import Tuple, Optional
 import gym
 import math
 
-import torch
-
 from alphagen.config import MAX_EXPR_LENGTH
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
@@ -52,16 +50,20 @@ class AlphaEnvCore(gym.Env):
             reward = 0.0
         else:
             done = True
-            reward = self._evaluate() if self._builder.is_valid() else -1.0
+            reward = self._evaluate() if self._builder.is_valid() else -0.
+
         if math.isnan(reward):
-            reward = -1
+            reward = 0.
         return self._tokens, reward, done, self._valid_action_types()
 
     def _evaluate(self):
         expr: Expression = self._builder.get_tree()
         if self._print_expr:
             print(expr)
-        return self.pool.try_new_expr(expr)
+        try:
+            return self.pool.try_new_expr(expr)
+        except OutOfDataRangeError:
+            return 0.
 
     def _valid_action_types(self) -> dict:
         valid_op_unary = self._builder.validate_op(UnaryOperator)
