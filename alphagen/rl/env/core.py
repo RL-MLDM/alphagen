@@ -3,17 +3,17 @@ import gym
 import math
 
 from alphagen.config import MAX_EXPR_LENGTH
+from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import ExpressionBuilder
-from alphagen.models.alpha_pool import AlphaPool
 from alphagen.utils import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
     eval: Evaluation
     _tokens: List[Token]
-    _builder: AlphaTreeBuilder
+    _builder: ExpressionBuilder
     _print_expr: bool
 
     def __init__(self,
@@ -25,9 +25,6 @@ class AlphaEnvCore(gym.Env):
         self.eval = ev
         self._print_expr = print_expr
         self._device = device
-        self._pool = AlphaPool(data, target, record_path)
-        self._min_ic_first = min_ic_first
-        self._min_ic_increment = min_ic_increment
 
     def reset(
         self, *,

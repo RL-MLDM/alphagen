@@ -1,4 +1,3 @@
-from typing import List, Type
 from alphagen.data.expression import *
 
 
@@ -24,4 +23,4 @@ DELTA_TIMES = [10, 20, 30, 40, 50]
 
 CONSTANTS = [-30., -10., -5., -2., -1., -0.5, -0.01, 0.01, 0.5, 1., 2., 5., 10., 30.]
 
-REWARD_PER_STEP = 4e-4
+REWARD_PER_STEP = 2e-4

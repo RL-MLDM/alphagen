@@ -43,27 +43,27 @@ def action2token(action_raw: int) -> Token:
 
 
 class AlphaEnvWrapper(gym.Wrapper):
-    _ptr: int
     state: np.ndarray
     env: AlphaEnvCore
     action_space: gym.spaces.Discrete
     observation_space: gym.spaces.Box
+    counter: int
 
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
         self.action_space = gym.spaces.Discrete(SIZE_ACTION)
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=(MAX_TOKEN_LENGTH * SIZE_ACTION, ), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=SIZE_ALL - 1, shape=(MAX_EXPR_LENGTH, ), dtype=np.uint8)
 
     def reset(self, **kwargs) -> np.ndarray:
         self.counter = 0
-        self.state = np.zeros(MAX_TOKEN_LENGTH * SIZE_ACTION, dtype=np.uint8)
+        self.state = np.zeros(MAX_EXPR_LENGTH, dtype=np.uint8)
         self.env.reset()
         return self.state
 
     def step(self, action: int):
         _, reward, done, info = self.env.step(self.action(action))
         if not done:
-            self.state[self.counter * SIZE_ACTION + action] = 1
+            self.state[self.counter] = action
             self.counter += 1
         return self.state, self.reward(reward), done, info
 
@@ -107,7 +107,9 @@ if __name__ == '__main__':
         instrument='csi300',
         start_time='2016-01-01',
         end_time='2018-12-31',
-        target=target
+        target=target,
+        print_expr=True,
+        device=torch.device('cuda:0')
     )
     env = AlphaEnv(ev)
 

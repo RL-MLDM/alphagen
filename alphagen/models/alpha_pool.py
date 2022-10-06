@@ -1,14 +1,13 @@
-import math
-from typing import List, Optional
 from copy import deepcopy
+from typing import List, Optional
 
 import torch
 from torch import Tensor, nn, optim
 
 from alphagen.data.expression import Expression, OutOfDataRangeError
-from alphagen.data.stock_data import StockData
-from alphagen.utils.pytorch_utils import masked_mean_std
 from alphagen.utils.correlation import batch_pearsonr
+from alphagen.utils.pytorch_utils import masked_mean_std
+from alphagen_qlib.stock_data import StockData
 
 
 class AlphaPool:

@@ -62,7 +62,7 @@ class Expression(metaclass=ABCMeta):
     def __abs__(self) -> "Abs": return Abs(self)
 
     @property
-    def is_featured(self): return not isinstance(self, (Constant, DeltaTime))
+    def is_featured(self): raise NotImplementedError
 
 
 class Feature(Expression):
@@ -79,6 +79,9 @@ class Feature(Expression):
         return data.data[start:stop, int(self._feature), :]
 
     def __str__(self) -> str: return '$' + self._feature.name.lower()
+
+    @property
+    def is_featured(self): return True
 
 
 class Constant(Expression):
@@ -98,6 +101,9 @@ class Constant(Expression):
 
     def __str__(self) -> str: return str(self._value)
 
+    @property
+    def is_featured(self): return False
+
 
 class DeltaTime(Expression):
     # This is not something that should be in the final expression
@@ -109,6 +115,9 @@ class DeltaTime(Expression):
         assert False, "Should not call evaluate on delta time"
 
     def __str__(self) -> str: return str(self._delta_time)
+
+    @property
+    def is_featured(self): return False
 
 
 # Operator base classes
@@ -142,6 +151,9 @@ class UnaryOperator(Operator):
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._operand})"
 
+    @property
+    def is_featured(self): return self._operand.is_featured
+
 
 class BinaryOperator(Operator):
     def __init__(self, lhs: Expression, rhs: Expression) -> None:
@@ -162,6 +174,9 @@ class BinaryOperator(Operator):
 
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._lhs},{self._rhs})"
+
+    @property
+    def is_featured(self): return self._lhs.is_featured or self._rhs.is_featured
 
 
 class RollingOperator(Operator):
@@ -192,6 +207,9 @@ class RollingOperator(Operator):
 
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._operand},{self._delta_time})"
+
+    @property
+    def is_featured(self): return self._operand.is_featured
 
 
 class PairRollingOperator(Operator):
@@ -230,6 +248,9 @@ class PairRollingOperator(Operator):
 
     def __str__(self) -> str:
         return f"{type(self).__name__}({self._lhs},{self._rhs},{self._delta_time})"
+
+    @property
+    def is_featured(self): return self._lhs.is_featured or self._rhs.is_featured
 
 
 # Operator implementations

@@ -6,6 +6,7 @@ from datetime import datetime
 
 from alphagen.data.expression import *
 from alphagen.rl.env.wrapper import AlphaEnv
+from alphagen.rl.policy import LSTMSharedNet
 from alphagen.utils.cache import LRUCache
 from alphagen.utils.random import reseed_everything
 from alphagen_qlib.evaluation import QLibEvaluation
@@ -78,9 +79,10 @@ if __name__ == '__main__':
 
     ev = QLibEvaluation(
         instrument='csi300',
-        start_time='2009-01-01',
+        start_time='2014-01-01',
         end_time='2018-12-31',
         target=target,
+        print_expr=True,
         device=device,
     )
     # ev.cache.preload('/DATA/xuehy/preload/zz300_static_20160101_20181231.json')
@@ -95,21 +97,30 @@ if __name__ == '__main__':
         save_path='./logs/',
         name_prefix=NAME_PREFIX,
         timestamp=TIMESTAMP,
-        verbose=1
+        verbose=1,
     )
 
     model = MaskablePPO(
         'MlpPolicy',
         env,
+        policy_kwargs=dict(
+            features_extractor_class=LSTMSharedNet,
+            features_extractor_kwargs=dict(
+                n_layers=2,
+                d_model=128,
+                dropout=0.1,
+                device=device,
+            ),
+        ),
         gamma=1.,
-        ent_coef=0.,
+        ent_coef=0.01,
         batch_size=128,
         tensorboard_log=f'/DATA/xuehy/tb_logs/maskable_ppo',
         device=device,
-        verbose=1
+        verbose=1,
     )
     model.learn(
         total_timesteps=2000000,
         callback=checkpoint_callback,
-        tb_log_name=f'{NAME_PREFIX}_{TIMESTAMP}'
+        tb_log_name=f'{NAME_PREFIX}_{TIMESTAMP}',
     )
