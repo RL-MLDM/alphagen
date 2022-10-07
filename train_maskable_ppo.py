@@ -43,7 +43,7 @@ class CustomCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self.logger.record('pool/size', self.pool.size)
-        self.logger.record('pool/selected', (self.pool.weights[:self.pool.size].abs() > 1e-4).sum())
+        self.logger.record('pool/significant', (self.pool.weights[:self.pool.size].abs() > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
 
     def save_checkpoint(self):
