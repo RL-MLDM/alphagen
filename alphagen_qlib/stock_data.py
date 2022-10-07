@@ -11,7 +11,7 @@ class FeatureType(IntEnum):
     HIGH = 2
     LOW = 3
     VOLUME = 4
-    # VWAP = 5
+    VWAP = 5
 
 
 class StockData:

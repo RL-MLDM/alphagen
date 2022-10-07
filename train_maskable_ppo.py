@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+import numpy as np
 from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 
@@ -43,7 +44,7 @@ class CustomCallback(BaseCallback):
 
     def _on_rollout_end(self) -> None:
         self.logger.record('pool/size', self.pool.size)
-        self.logger.record('pool/significant', (self.pool.weights[:self.pool.size].abs() > 1e-4).sum())
+        self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
 
     def save_checkpoint(self):

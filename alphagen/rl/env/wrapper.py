@@ -1,10 +1,8 @@
 import gym
 import gym.spaces
 import numpy as np
-import torch
 
 from alphagen.config import *
-from alphagen.data.evaluation import Evaluation
 from alphagen.data.tokens import *
 from alphagen.models.alpha_pool import AlphaPool
 from alphagen.rl.env.core import AlphaEnvCore

@@ -69,7 +69,7 @@ class AlphaEnvCore(gym.Env):
         valid_op_unary = self._builder.validate_op(UnaryOperator)
         valid_op_binary = self._builder.validate_op(BinaryOperator)
         valid_op_rolling = self._builder.validate_op(RollingOperator)
-        valid_op_pair_rolling = False  # self.builder.validate_op(PairRollingOperator)
+        valid_op_pair_rolling = self._builder.validate_op(PairRollingOperator)
 
         valid_op = valid_op_unary or valid_op_binary or valid_op_rolling or valid_op_pair_rolling
         valid_dt = self._builder.validate_dt()

@@ -16,7 +16,7 @@ OPERATORS = [
     Med, Mad,  # Rank,
     Delta, WMA, EMA,
     # Pair rolling
-    Cov
+    Cov, Corr
 ]
 
 DELTA_TIMES = [10, 20, 30, 40, 50]
