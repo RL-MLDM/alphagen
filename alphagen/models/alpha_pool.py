@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 from alphagen.data.expression import Expression
-from alphagen.utils.correlation import batch_pearsonr
+from alphagen.utils.correlation import batch_pearsonr, batch_spearmanr
 from alphagen.utils.pytorch_utils import masked_mean_std
 from alphagen_qlib.stock_data import StockData
 
@@ -114,7 +114,21 @@ class AlphaPool:
         self.weights[:self.size] = best_weights
         return best_weights[-1]
 
-    def evaluate_ensemble(self) -> float:
+    def test_ensemble(self, data: StockData, target: Expression) -> Tuple[float, float]:
+        with torch.no_grad():
+            factors = []
+            for i in range(self.size):
+                factor = self._normalize_by_day(self.exprs[i].evaluate(data))
+                weighted_factor = factor * self.weights[i]
+                factors.append(weighted_factor)
+            combined_factor = sum(factors)
+            target_factor = target.evaluate(data)
+
+            ic = batch_pearsonr(combined_factor, target_factor).mean().item()
+            rank_ic = batch_spearmanr(combined_factor, target_factor).mean().item()
+            return ic, rank_ic
+
+    def evaluate_ensemble(self):
         with torch.no_grad():
             ensemble_factor = self._normalize_by_day(sum(self.values[i] * self.weights[i] for i in range(self.size)))
             ensemble_ic = batch_pearsonr(ensemble_factor, self.target).mean().item()

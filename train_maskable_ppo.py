@@ -17,6 +17,10 @@ class CustomCallback(BaseCallback):
                  save_freq: int,
                  show_freq: int,
                  save_path: str,
+                 valid_data: StockData,
+                 valid_target: Expression,
+                 test_data: StockData,
+                 test_target: Expression,
                  name_prefix: str = 'rl_model',
                  timestamp: str = None,
                  verbose: int = 0):
@@ -25,6 +29,11 @@ class CustomCallback(BaseCallback):
         self.show_freq = show_freq
         self.save_path = save_path
         self.name_prefix = name_prefix
+
+        self.valid_data = valid_data
+        self.valid_target = valid_target
+        self.test_data = test_data
+        self.test_target = test_target
 
         if timestamp is None:
             self.timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
@@ -46,6 +55,12 @@ class CustomCallback(BaseCallback):
         self.logger.record('pool/size', self.pool.size)
         self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
+        ic_valid, rank_ic_valid = self.pool.test_ensemble(self.valid_data, self.valid_target)
+        ic_test, rank_ic_test = self.pool.test_ensemble(self.test_data, self.test_target)
+        self.logger.record('valid/ic', ic_valid)
+        self.logger.record('valid/rank_ic', rank_ic_valid)
+        self.logger.record('test/ic_', ic_test)
+        self.logger.record('test/rank_ic_', rank_ic_test)
 
     def save_checkpoint(self):
         path = os.path.join(self.save_path, f'{self.name_prefix}_{self.timestamp}', f'{self.num_timesteps}_steps')
@@ -81,20 +96,33 @@ if __name__ == '__main__':
     data = StockData(instrument='csi300',
                      start_time='2009-01-01',
                      end_time='2018-12-31')
-    pool = AlphaPool(capacity=20,
+    data_valid = StockData(instrument='csi300',
+                          start_time='2019-01-01',
+                          end_time='2019-12-31')
+    data_test = StockData(instrument='csi300',
+                     start_time='2020-01-01',
+                     end_time='2021-12-31')
+
+    POOL_CAPACITY = 50
+    pool = AlphaPool(capacity=POOL_CAPACITY,
                      stock_data=data,
                      target=target,
                      ic_lower_bound=None,
                      ic_min_increment=None)
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
-    NAME_PREFIX = f'maskable_ppo_seed{SEED}'
+    MODEL_NAME = 'ppo_e_lstm'
+    NAME_PREFIX = f'{MODEL_NAME}_s{SEED}_p{POOL_CAPACITY}'
     TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
         save_freq=10000,
         show_freq=10000,
         save_path='./logs/',
+        valid_data=data_valid,
+        valid_target=target,
+        test_data=data_test,
+        test_target=target,
         name_prefix=NAME_PREFIX,
         timestamp=TIMESTAMP,
         verbose=1,
@@ -115,7 +143,7 @@ if __name__ == '__main__':
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log=f'/DATA/xuehy/tb_logs/maskable_ppo',
+        tensorboard_log=f'/DATA/xuehy/tb_logs/{MODEL_NAME}',
         device=device,
         verbose=1,
     )

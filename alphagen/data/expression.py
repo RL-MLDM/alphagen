@@ -99,7 +99,7 @@ class Constant(Expression):
         return torch.full(size=(days, data.n_stocks),
                           fill_value=self._value, dtype=dtype, device=device)
 
-    def __str__(self) -> str: return str(self._value)
+    def __str__(self) -> str: return f'Constant({str(self._value)})'
 
     @property
     def is_featured(self): return False
