@@ -191,6 +191,10 @@ class AlphaPool:
         self.ics_mut[[i, j], :] = self.ics_mut[[j, i], :]
         self.weights[i], self.weights[j] = self.weights[j], self.weights[i]
 
+    def to_dict(self) -> dict:
+        return dict(exprs=[str(expr) for expr in self.exprs[:self.size]],
+                    weights=list(self.weights[:self.size]))
+
 
 if __name__ == '__main__':
     from alphagen.data.expression import *

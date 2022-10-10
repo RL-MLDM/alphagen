@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 
@@ -45,8 +46,6 @@ class CustomCallback(BaseCallback):
             os.makedirs(self.save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
-        if self.n_calls % self.save_freq == 0:
-            self.save_checkpoint()
         if self.n_calls % self.show_freq == 0:
             self.show_pool_state()
         return True
@@ -61,12 +60,15 @@ class CustomCallback(BaseCallback):
         self.logger.record('valid/rank_ic', rank_ic_valid)
         self.logger.record('test/ic_', ic_test)
         self.logger.record('test/rank_ic_', rank_ic_test)
+        self.save_checkpoint()
 
     def save_checkpoint(self):
         path = os.path.join(self.save_path, f'{self.name_prefix}_{self.timestamp}', f'{self.num_timesteps}_steps')
         self.model.save(path)
         if self.verbose > 1:
             print(f'Saving model checkpoint to {path}')
+        with open(f'{path}_pool.json', 'w') as f:
+            json.dump(pool.to_dict(), f)
 
     def show_pool_state(self):
         state = self.pool.state
@@ -86,20 +88,22 @@ class CustomCallback(BaseCallback):
 
 
 if __name__ == '__main__':
-    SEED = 0
+    SEED = 1
     reseed_everything(SEED)
+
+    INSTRUMENTS = 'csi500'
 
     device = torch.device('cuda:0')
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
 
-    data = StockData(instrument='csi300',
+    data = StockData(instrument=INSTRUMENTS,
                      start_time='2009-01-01',
                      end_time='2018-12-31')
-    data_valid = StockData(instrument='csi300',
+    data_valid = StockData(instrument=INSTRUMENTS,
                           start_time='2019-01-01',
                           end_time='2019-12-31')
-    data_test = StockData(instrument='csi300',
+    data_test = StockData(instrument=INSTRUMENTS,
                      start_time='2020-01-01',
                      end_time='2021-12-31')
 
@@ -112,7 +116,7 @@ if __name__ == '__main__':
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     MODEL_NAME = 'ppo_e_lstm'
-    NAME_PREFIX = f'{MODEL_NAME}_s{SEED}_p{POOL_CAPACITY}'
+    NAME_PREFIX = f'{MODEL_NAME}_s{SEED}_p{POOL_CAPACITY}_i{INSTRUMENTS}'
     TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
