@@ -54,12 +54,12 @@ class StockData:
             exprs = [exprs]
         cal: np.ndarray = D.calendar()
         start_index = cal.searchsorted(pd.Timestamp(self._start_time))  # type: ignore
-        end_index = cal.searchsorted(pd.Timestamp(self._end_time))      # type: ignore
+        end_index = cal.searchsorted(pd.Timestamp(self._end_time))  # type: ignore
         real_start_time = cal[start_index - self.max_backtrack_days]
         if cal[end_index] != pd.Timestamp(self._end_time):
             end_index -= 1
         real_end_time = cal[end_index + self.max_future_days]
-        return (QlibDataLoader(config=exprs)    # type: ignore
+        return (QlibDataLoader(config=exprs)  # type: ignore
                 .load(self._instrument, real_start_time, real_end_time))
 
     def _get_data(self) -> torch.Tensor:
@@ -71,11 +71,45 @@ class StockData:
         return torch.tensor(values, dtype=torch.float, device=self.device)
 
     @property
-    def n_features(self) -> int: return len(self._features)
+    def n_features(self) -> int:
+        return len(self._features)
 
     @property
-    def n_stocks(self) -> int: return self.data.shape[-1]
+    def n_stocks(self) -> int:
+        return self.data.shape[-1]
 
     @property
     def n_days(self) -> int:
         return self.data.shape[0] - self.max_backtrack_days - self.max_future_days
+
+    def make_dataframe(
+            self,
+            data: Union[torch.Tensor, List[torch.Tensor]],
+            columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        """
+            Parameters:
+            - `data`: a tensor of size `(n_days, n_stocks[, n_columns])`, or
+            a list of tensors of size `(n_days, n_stocks)`
+            - `columns`: an optional list of column names
+            """
+        if isinstance(data, list):
+            data = torch.stack(data, dim=2)
+        if len(data.shape) == 2:
+            data = data.unsqueeze(2)
+        if columns is None:
+            columns = [str(i) for i in range(data.shape[2])]
+        n_days, n_stocks, n_columns = data.shape
+        if self.n_days != n_days:
+            raise ValueError(f"number of days in the provided tensor ({n_days}) doesn't "
+                             f"match that of the current StockData ({self.n_days})")
+        if self.n_stocks != n_stocks:
+            raise ValueError(f"number of stocks in the provided tensor ({n_stocks}) doesn't "
+                             f"match that of the current StockData ({self.n_stocks})")
+        if len(columns) != n_columns:
+            raise ValueError(f"size of columns ({len(columns)}) doesn't match with "
+                             f"tensor feature count ({data.shape[2]})")
+        date_index = self._dates[self.max_backtrack_days:-self.max_future_days]
+        index = pd.MultiIndex.from_product([date_index, self._stock_ids])
+        data = data.reshape(-1, n_columns)
+        return pd.DataFrame(data.detach().cpu().numpy(), index=index, columns=columns)

@@ -7,7 +7,7 @@ from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 
 from alphagen.data.expression import *
-from alphagen.models.alpha_pool import AlphaPool
+from alphagen.models.alpha_pool import AlphaPool, SingleAlphaPool
 from alphagen.rl.env.wrapper import AlphaEnv
 from alphagen.rl.policy import LSTMSharedNet
 from alphagen.utils.random import reseed_everything
@@ -46,8 +46,8 @@ class CustomCallback(BaseCallback):
             os.makedirs(self.save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
-        if self.n_calls % self.show_freq == 0:
-            self.show_pool_state()
+        # if self.n_calls % self.show_freq == 0:
+        #     self. show_pool_state()
         return True
 
     def _on_rollout_end(self) -> None:
@@ -88,7 +88,7 @@ class CustomCallback(BaseCallback):
 
 
 if __name__ == '__main__':
-    SEED = 1
+    SEED = 4
     reseed_everything(SEED)
 
     INSTRUMENTS = 'csi500'
@@ -107,15 +107,15 @@ if __name__ == '__main__':
                      start_time='2020-01-01',
                      end_time='2021-12-31')
 
-    POOL_CAPACITY = 50
-    pool = AlphaPool(capacity=POOL_CAPACITY,
+    POOL_CAPACITY = 0
+    pool = SingleAlphaPool(capacity=POOL_CAPACITY,
                      stock_data=data,
                      target=target,
                      ic_lower_bound=None,
                      ic_min_increment=None)
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
-    MODEL_NAME = 'ppo_e_lstm'
+    MODEL_NAME = 'ppo_s_lstm'
     NAME_PREFIX = f'{MODEL_NAME}_s{SEED}_p{POOL_CAPACITY}_i{INSTRUMENTS}'
     TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')
 

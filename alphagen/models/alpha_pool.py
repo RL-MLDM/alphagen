@@ -1,5 +1,5 @@
 from itertools import count
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 
 import numpy as np
 import torch
@@ -194,6 +194,70 @@ class AlphaPool:
     def to_dict(self) -> dict:
         return dict(exprs=[str(expr) for expr in self.exprs[:self.size]],
                     weights=list(self.weights[:self.size]))
+
+
+class SingleAlphaPool:
+    def __init__(self,
+                 capacity: int,
+                 stock_data: StockData,
+                 target: Expression,
+                 ic_lower_bound: Optional[float],
+                 ic_min_increment: Optional[float],
+                 exclude_set: Optional[Set[Expression]] = None):
+        self.data = stock_data
+        self.target = self._normalize_by_day(target.evaluate(self.data))
+        self.cache = {}
+        self.capacity = capacity
+
+        if exclude_set is None:
+            self.exclude_set = []
+        else:
+            self.exclude_set = [self._normalize_by_day(expr.evaluate(self.data)) for expr in exclude_set]
+        self.ic_lower_bound = ic_lower_bound
+        self.ic_min_increment = ic_min_increment
+
+    def try_new_expr(self, expr: Expression) -> float:
+        key = str(expr)
+        if key in self.cache:
+            return self.cache[key]
+        value = self._normalize_by_day(expr.evaluate(self.data))
+        for exc in self.exclude_set:
+            if self.ic(value, exc) > 0.9:
+                self.cache[key] = -1.
+                return -1.
+        ic = self.ic(value, self.target)
+        self.cache[key] = ic
+        return ic
+
+    @staticmethod
+    def ic(x, y):
+        return batch_pearsonr(x, y).mean().item()
+
+    @staticmethod
+    def _normalize_by_day(value: Tensor) -> Tensor:
+        mean, std = masked_mean_std(value)
+        value = (value - mean[:, None]) / std[:, None]
+        nan_mask = torch.isnan(value)
+        value[nan_mask] = 0.
+        return value
+
+    @property
+    def size(self):
+        return 1
+
+    @property
+    def weights(self):
+        return np.array([1])
+
+    @property
+    def best_ic_ret(self):
+        return max(self.cache.values())
+
+    def to_dict(self) -> dict:
+        return self.cache
+
+    def test_ensemble(self, data: StockData, target: Expression) -> Tuple[float, float]:
+        return 0., 0.
 
 
 if __name__ == '__main__':

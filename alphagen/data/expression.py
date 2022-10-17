@@ -440,7 +440,9 @@ class Corr(PairRollingOperator):
         ncov = (clhs * crhs).sum(dim=-1)
         nlvar = (clhs ** 2).sum(dim=-1)
         nrvar = (crhs ** 2).sum(dim=-1)
-        return ncov / (nlvar * nrvar).sqrt()
+        stdmul = (nlvar * nrvar).sqrt()
+        stdmul[(nlvar < 1e-6) | (nrvar < 1e-6)] = 1
+        return ncov / stdmul
 
 
 Operators: List[Type[Expression]] = [
