@@ -1,4 +1,4 @@
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple
 from enum import IntEnum
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ class StockData:
         self._end_time = end_time
         self._features = features if features is not None else list(FeatureType)
         self.device = device
-        self.data = self._get_data()
+        self.data, self._dates, self._stock_ids = self._get_data()
 
     @classmethod
     def _init_qlib(cls) -> None:
@@ -42,7 +42,7 @@ class StockData:
             return
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_baostock_fwdadj", region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
@@ -62,13 +62,15 @@ class StockData:
         return (QlibDataLoader(config=exprs)  # type: ignore
                 .load(self._instrument, real_start_time, real_end_time))
 
-    def _get_data(self) -> torch.Tensor:
+    def _get_data(self) -> Tuple[torch.Tensor, pd.Index, pd.Index]:
         features = ['$' + f.name.lower() for f in self._features]
         df = self._load_exprs(features)
         df = df.stack().unstack(level=1)
+        dates = df.index.levels[0]                                      # type: ignore
+        stock_ids = df.columns
         values = df.values
         values = values.reshape((-1, len(features), values.shape[-1]))  # type: ignore
-        return torch.tensor(values, dtype=torch.float, device=self.device)
+        return torch.tensor(values, dtype=torch.float, device=self.device), dates, stock_ids
 
     @property
     def n_features(self) -> int:
@@ -83,9 +85,9 @@ class StockData:
         return self.data.shape[0] - self.max_backtrack_days - self.max_future_days
 
     def make_dataframe(
-            self,
-            data: Union[torch.Tensor, List[torch.Tensor]],
-            columns: Optional[List[str]] = None
+        self,
+        data: Union[torch.Tensor, List[torch.Tensor]],
+        columns: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
             Parameters:

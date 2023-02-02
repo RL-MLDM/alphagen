@@ -75,7 +75,7 @@ if __name__ == '__main__':
                                    ic_lower_bound=None,
                                    ic_min_increment=None)
                 a_pool.force_load_exprs([eval(key.replace('$', '')) for key in keys])
-                a_pool.optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
+                a_pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
                 ic_test, rank_ic_test = a_pool.test_ensemble(data_test, target)
 
                 ic_res[(step, capacity)] += ic_test

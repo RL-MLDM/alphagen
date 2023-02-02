@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Optional
 from datetime import datetime
 
 import numpy as np
@@ -23,7 +24,7 @@ class CustomCallback(BaseCallback):
                  test_data: StockData,
                  test_target: Expression,
                  name_prefix: str = 'rl_model',
-                 timestamp: str = None,
+                 timestamp: Optional[str] = None,
                  verbose: int = 0):
         super().__init__(verbose)
         self.save_freq = save_freq
@@ -51,6 +52,7 @@ class CustomCallback(BaseCallback):
         return True
 
     def _on_rollout_end(self) -> None:
+        assert self.logger is not None
         self.logger.record('pool/size', self.pool.size)
         self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
@@ -64,11 +66,11 @@ class CustomCallback(BaseCallback):
 
     def save_checkpoint(self):
         path = os.path.join(self.save_path, f'{self.name_prefix}_{self.timestamp}', f'{self.num_timesteps}_steps')
-        self.model.save(path)
+        self.model.save(path)   # type: ignore
         if self.verbose > 1:
             print(f'Saving model checkpoint to {path}')
         with open(f'{path}_pool.json', 'w') as f:
-            json.dump(pool.to_dict(), f)
+            json.dump(self.pool.to_dict(), f)
 
     def show_pool_state(self):
         state = self.pool.state
@@ -84,40 +86,49 @@ class CustomCallback(BaseCallback):
 
     @property
     def pool(self) -> AlphaPool:
-        return self.training_env.envs[0].unwrapped.pool
+        return self.training_env.envs[0].unwrapped.pool     # type: ignore
 
 
-if __name__ == '__main__':
-    SEED = 4
-    reseed_everything(SEED)
-
-    INSTRUMENTS = 'csi500'
+def main(
+    seed: int = 0,
+    instruments: str = "csi300",
+    pool_capacity: int = 10,
+    steps: int = 200_000
+):
+    reseed_everything(seed)
 
     device = torch.device('cuda:0')
     close = Feature(FeatureType.CLOSE)
     target = Ref(close, -20) / close - 1
 
-    data = StockData(instrument=INSTRUMENTS,
+    data = StockData(instrument=instruments,
                      start_time='2009-01-01',
                      end_time='2018-12-31')
-    data_valid = StockData(instrument=INSTRUMENTS,
-                          start_time='2019-01-01',
-                          end_time='2019-12-31')
-    data_test = StockData(instrument=INSTRUMENTS,
-                     start_time='2020-01-01',
-                     end_time='2021-12-31')
+    data_valid = StockData(instrument=instruments,
+                           start_time='2019-01-01',
+                           end_time='2019-12-31')
+    data_test = StockData(instrument=instruments,
+                          start_time='2020-01-01',
+                          end_time='2021-12-31')
 
-    POOL_CAPACITY = 0
-    pool = SingleAlphaPool(capacity=POOL_CAPACITY,
-                     stock_data=data,
-                     target=target,
-                     ic_lower_bound=None,
-                     ic_min_increment=None)
+    if pool_capacity == 0:
+        pool = SingleAlphaPool(
+            capacity=pool_capacity,
+            stock_data=data,
+            target=target,
+            ic_lower_bound=None
+        )
+    else:
+        pool = AlphaPool(
+            capacity=pool_capacity,
+            stock_data=data,
+            target=target,
+            ic_lower_bound=None
+        )
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
-    MODEL_NAME = 'ppo_s_lstm'
-    NAME_PREFIX = f'{MODEL_NAME}_s{SEED}_p{POOL_CAPACITY}_i{INSTRUMENTS}'
-    TIMESTAMP = datetime.now().strftime('%Y%m%d%H%M%S')
+    name_prefix = f"ppo_{instruments}_{pool_capacity}_{seed}"
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
         save_freq=10000,
@@ -127,8 +138,8 @@ if __name__ == '__main__':
         valid_target=target,
         test_data=data_test,
         test_target=target,
-        name_prefix=NAME_PREFIX,
-        timestamp=TIMESTAMP,
+        name_prefix=name_prefix,
+        timestamp=timestamp,
         verbose=1,
     )
 
@@ -147,12 +158,26 @@ if __name__ == '__main__':
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log=f'/DATA/xuehy/tb_logs/{MODEL_NAME}',
+        tensorboard_log=f'./tb_logs/ppo',
         device=device,
         verbose=1,
     )
     model.learn(
-        total_timesteps=2000000,
+        total_timesteps=steps,
         callback=checkpoint_callback,
-        tb_log_name=f'{NAME_PREFIX}_{TIMESTAMP}',
+        tb_log_name=f'{name_prefix}_{timestamp}',
     )
+
+
+if __name__ == '__main__':
+    steps = {
+        0: 250_000,
+        10: 250_000,
+        20: 300_000,
+        50: 350_000,
+        100: 400_000
+    }
+    for capacity in [0, 10, 20, 50, 100]:
+        for seed in range(10):
+            for instruments in ["csi300", "csi500"]:
+                main(seed=seed, instruments=instruments, pool_capacity=capacity, steps=steps[capacity])

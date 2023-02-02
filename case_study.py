@@ -34,7 +34,7 @@ def try_pool(exprs):
                        ic_lower_bound=None,
                        ic_min_increment=None)
     a_pool.force_load_exprs(exprs)
-    a_pool.optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
+    a_pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
     return a_pool.test_ensemble(data_test, target)
 
 

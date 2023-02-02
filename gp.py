@@ -1,6 +1,7 @@
 import json
 from collections import Counter
 from pprint import pprint
+import os
 
 import numpy as np
 
@@ -8,6 +9,7 @@ from alphagen.data.expression import *
 from alphagen.models.alpha_pool import AlphaPool
 from alphagen.utils.correlation import batch_pearsonr, batch_spearmanr
 from alphagen.utils.pytorch_utils import masked_mean_std
+from alphagen.utils.random import reseed_everything
 from gplearn.fitness import make_fitness
 from gplearn.functions import make_function
 from gplearn.genetic import SymbolicRegressor
@@ -68,10 +70,15 @@ for op in rolling_binary_ops:
 
 # with open('./logs/cache.json') as f:
 #     cache = json.load(f)
+instruments = "csi500"
+seed = 9
+reseed_everything(seed)
+
 cache = {}
 device = torch.device('cuda:0')
-data = StockData('csi500', '2009-01-01', '2018-12-31', device=device)
-data_test = StockData('csi500', '2020-01-01', '2021-12-31', device=device)
+data = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
+data_valid = StockData(instruments, '2019-01-01', '2019-12-31', device=device)
+data_test = StockData(instruments, '2020-01-01', '2021-12-31', device=device)
 
 open_func = open
 
@@ -86,8 +93,7 @@ target = Ref(close, -20) / close - 1
 pool = AlphaPool(capacity=10,
                  stock_data=data,
                  target=target,
-                 ic_lower_bound=None,
-                 ic_min_increment=None)
+                 ic_lower_bound=None)
 
 
 def _normalize_by_day(value: Tensor) -> Tensor:
@@ -99,6 +105,8 @@ def _normalize_by_day(value: Tensor) -> Tensor:
 
 
 target_factor = target.evaluate(data)
+target_factor_valid = target.evaluate(data_valid)
+target_factor_test = target.evaluate(data_test)
 
 
 def _metric(x, y, w):
@@ -128,34 +136,46 @@ Metric = make_fitness(function=_metric, greater_is_better=True)
 
 def try_single():
     top_key = Counter(cache).most_common(1)[0][0]
-    top1_ic = batch_pearsonr(eval(top_key).evaluate(data_test), target.evaluate(data_test)).mean().item()
-    top1_rank_ic = batch_spearmanr(eval(top_key).evaluate(data_test), target.evaluate(data_test)).mean().item()
-    return top1_ic, top1_rank_ic
+    v_valid = eval(top_key).evaluate(data_valid)
+    v_test = eval(top_key).evaluate(data_test)
+    ic_test = batch_pearsonr(v_test, target_factor_test).mean().item()
+    ic_valid = batch_pearsonr(v_valid, target_factor_valid).mean().item()
+    ric_test = batch_spearmanr(v_test, target_factor_test).mean().item()
+    ric_valid = batch_spearmanr(v_valid, target_factor_valid).mean().item()
+    return {"ic_test": ic_test, "ic_valid": ic_valid, "ric_test": ric_test, "ric_valid": ric_valid}
 
 
 def try_pool(capacity):
     pool = AlphaPool(capacity=capacity,
                      stock_data=data,
                      target=target,
-                     ic_lower_bound=None,
-                     ic_min_increment=None)
+                     ic_lower_bound=None)
 
     exprs = []
     for key in dict(Counter(cache).most_common(capacity)):
         exprs.append(eval(key))
     pool.force_load_exprs(exprs)
-    pool.optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
-    if capacity == 10:
-        print(pool.to_dict())
+    pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
 
-    ic_test, rank_ic_test = pool.test_ensemble(data_test, target)
-    return ic_test, rank_ic_test
+    ic_test, ric_test = pool.test_ensemble(data_test, target)
+    ic_valid, ric_valid = pool.test_ensemble(data_valid, target)
+    return {"ic_test": ic_test, "ic_valid": ic_valid, "ric_test": ric_test, "ric_valid": ric_valid}
 
+
+generation = 0
 
 def ev():
-    print([try_single()] + [try_pool(capacity) for capacity in (10, 20, 50, 100)])
-    with open_func('./logs/cache_500.json', 'w') as f:
-        json.dump(cache, f)
+    global generation
+    generation += 1
+    res = (
+        [{"pool": 0, "res": try_single()}] +
+        [{"pool": cap, "res": try_pool(cap)} for cap in (10, 20, 50, 100)]
+    )
+    print(res)
+    dir = f"./logs/gp_{instruments}_{seed}"
+    os.makedirs(dir, exist_ok=True)
+    with open_func(f'{dir}/{generation}.json', 'w') as f:
+        json.dump({"cache": cache, "res": res}, f)
 
 
 if __name__ == '__main__':
@@ -179,7 +199,7 @@ if __name__ == '__main__':
                                max_samples=0.9,
                                verbose=1,
                                parsimony_coefficient=0.,
-                               random_state=4,
+                               random_state=seed,
                                function_set=funcs,
                                metric=Metric,
                                const_range=None,
@@ -195,4 +215,3 @@ if __name__ == '__main__':
     # print(pool.to_dict())
     # with open_func('./logs/gp_pool_demo_p10_icsi300.json', 'w') as f:
     #     json.dump(pool.to_dict(), f)
-

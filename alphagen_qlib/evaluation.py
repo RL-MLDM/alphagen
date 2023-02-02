@@ -9,7 +9,7 @@ from alphagen.utils.correlation import batch_pearsonr, batch_spearmanr
 
 
 class QLibEvaluation(Evaluation):
-    instrument: str
+    instrument: Union[str, List[str]]
     start_time: str
     end_time: str
     target: torch.Tensor

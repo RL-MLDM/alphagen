@@ -6,18 +6,18 @@ from alphagen.config import MAX_EXPR_LENGTH
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import ExpressionBuilder
-from alphagen.models.alpha_pool import AlphaPool
+from alphagen.models.alpha_pool import AlphaPoolBase, AlphaPool
 from alphagen.utils import reseed_everything
 
 
 class AlphaEnvCore(gym.Env):
-    pool: AlphaPool
+    pool: AlphaPoolBase
     _tokens: List[Token]
     _builder: ExpressionBuilder
     _print_expr: bool
 
     def __init__(self,
-                 pool: AlphaPool,
+                 pool: AlphaPoolBase,
                  device: torch.device = torch.device('cuda:0'),
                  print_expr: bool = False
                  ):
@@ -108,8 +108,7 @@ if __name__ == '__main__':
     pool = AlphaPool(capacity=10,
                      stock_data=data,
                      target=target,
-                     ic_lower_bound=None,
-                     ic_min_increment=None)
+                     ic_lower_bound=None)
     env = AlphaEnvCore(pool=pool, device=device, print_expr=True)
 
     tokens = [

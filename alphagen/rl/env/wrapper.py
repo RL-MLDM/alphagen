@@ -4,7 +4,7 @@ import numpy as np
 
 from alphagen.config import *
 from alphagen.data.tokens import *
-from alphagen.models.alpha_pool import AlphaPool
+from alphagen.models.alpha_pool import AlphaPoolBase, AlphaPool
 from alphagen.rl.env.core import AlphaEnvCore
 
 SIZE_NULL = 1
@@ -93,7 +93,7 @@ class AlphaEnvWrapper(gym.Wrapper):
         return res
 
 
-def AlphaEnv(pool: AlphaPool, **kwargs):
+def AlphaEnv(pool: AlphaPoolBase, **kwargs):
     return AlphaEnvWrapper(AlphaEnvCore(pool=pool, **kwargs))
 
 
@@ -108,8 +108,7 @@ if __name__ == '__main__':
     pool = AlphaPool(capacity=10,
                      stock_data=data,
                      target=target,
-                     ic_lower_bound=None,
-                     ic_min_increment=None)
+                     ic_lower_bound=None)
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     state = env.reset()
