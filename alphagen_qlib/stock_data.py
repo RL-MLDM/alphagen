@@ -1,4 +1,4 @@
-from typing import List, Tuple, Union, Optional
+from typing import List, Union, Optional, Tuple
 from enum import IntEnum
 import numpy as np
 import pandas as pd
@@ -11,20 +11,20 @@ class FeatureType(IntEnum):
     HIGH = 2
     LOW = 3
     VOLUME = 4
-    # VWAP = 5
+    VWAP = 5
 
 
 class StockData:
     _qlib_initialized: bool = False
 
     def __init__(self,
-                 instrument: str,
+                 instrument: Union[str, List[str]],
                  start_time: str,
                  end_time: str,
                  max_backtrack_days: int = 100,
                  max_future_days: int = 30,
                  features: Optional[List[FeatureType]] = None,
-                 device: torch.device = torch.device("cpu")) -> None:
+                 device: torch.device = torch.device('cuda:0')) -> None:
         self._init_qlib()
 
         self._instrument = instrument
@@ -33,7 +33,7 @@ class StockData:
         self._start_time = start_time
         self._end_time = end_time
         self._features = features if features is not None else list(FeatureType)
-        self._device = device
+        self.device = device
         self.data, self._dates, self._stock_ids = self._get_data()
 
     @classmethod
@@ -42,7 +42,7 @@ class StockData:
             return
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_baostock_fwdadj", region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
@@ -54,12 +54,12 @@ class StockData:
             exprs = [exprs]
         cal: np.ndarray = D.calendar()
         start_index = cal.searchsorted(pd.Timestamp(self._start_time))  # type: ignore
-        end_index = cal.searchsorted(pd.Timestamp(self._end_time))      # type: ignore
+        end_index = cal.searchsorted(pd.Timestamp(self._end_time))  # type: ignore
         real_start_time = cal[start_index - self.max_backtrack_days]
         if cal[end_index] != pd.Timestamp(self._end_time):
             end_index -= 1
         real_end_time = cal[end_index + self.max_future_days]
-        return (QlibDataLoader(config=exprs)    # type: ignore
+        return (QlibDataLoader(config=exprs)  # type: ignore
                 .load(self._instrument, real_start_time, real_end_time))
 
     def _get_data(self) -> Tuple[torch.Tensor, pd.Index, pd.Index]:
@@ -70,27 +70,31 @@ class StockData:
         stock_ids = df.columns
         values = df.values
         values = values.reshape((-1, len(features), values.shape[-1]))  # type: ignore
-        return torch.tensor(values, dtype=torch.float, device=self._device), dates, stock_ids
+        return torch.tensor(values, dtype=torch.float, device=self.device), dates, stock_ids
 
     @property
-    def n_features(self) -> int: return len(self._features)
+    def n_features(self) -> int:
+        return len(self._features)
 
     @property
-    def n_stocks(self) -> int: return self.data.shape[-1]
+    def n_stocks(self) -> int:
+        return self.data.shape[-1]
 
     @property
     def n_days(self) -> int:
         return self.data.shape[0] - self.max_backtrack_days - self.max_future_days
 
-    def make_dataframe(self,
-                       data: Union[torch.Tensor, List[torch.Tensor]],
-                       columns: Optional[List[str]] = None) -> pd.DataFrame:
+    def make_dataframe(
+        self,
+        data: Union[torch.Tensor, List[torch.Tensor]],
+        columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
         """
-        Parameters:
-        - `data`: a tensor of size `(n_days, n_stocks[, n_columns])`, or
-        a list of tensors of size `(n_days, n_stocks)`
-        - `columns`: an optional list of column names
-        """
+            Parameters:
+            - `data`: a tensor of size `(n_days, n_stocks[, n_columns])`, or
+            a list of tensors of size `(n_days, n_stocks)`
+            - `columns`: an optional list of column names
+            """
         if isinstance(data, list):
             data = torch.stack(data, dim=2)
         if len(data.shape) == 2:

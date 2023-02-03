@@ -2,10 +2,9 @@ import gym
 import gym.spaces
 import numpy as np
 
-from sb3_contrib.common.wrappers import ActionMasker
-
 from alphagen.config import *
 from alphagen.data.tokens import *
+from alphagen.models.alpha_pool import AlphaPoolBase, AlphaPool
 from alphagen.rl.env.core import AlphaEnvCore
 
 SIZE_NULL = 1
@@ -44,38 +43,28 @@ def action2token(action_raw: int) -> Token:
 
 
 class AlphaEnvWrapper(gym.Wrapper):
-    _current: int
-    _previous: int
     state: np.ndarray
     env: AlphaEnvCore
     action_space: gym.spaces.Discrete
     observation_space: gym.spaces.Box
+    counter: int
 
     def __init__(self, env: AlphaEnvCore):
         super().__init__(env)
         self.action_space = gym.spaces.Discrete(SIZE_ACTION)
-        self.observation_space = gym.spaces.Box(
-            low=0, high=SIZE_ALL-1, shape=(MAX_EPISODE_LENGTH, ), dtype=np.uint8)
+        self.observation_space = gym.spaces.Box(low=0, high=SIZE_ALL - 1, shape=(MAX_EXPR_LENGTH, ), dtype=np.uint8)
 
     def reset(self, **kwargs) -> np.ndarray:
-        self._current = 1
-        self._previous = MAX_EXPR_LENGTH + 1
-        self.state = np.zeros(MAX_EPISODE_LENGTH, dtype=np.uint8)
-        self.state[0] = self.state[MAX_EXPR_LENGTH] = OFFSET_SEP + 1    # [BEG]
+        self.counter = 0
+        self.state = np.zeros(MAX_EXPR_LENGTH, dtype=np.uint8)
         self.env.reset()
         return self.state
 
     def step(self, action: int):
-        observation, reward, done, info = self.env.step(self.action(action))
-        self.state[self._current] = action + 1
-        if len(observation[0]) == 1:
-            dst_slice = slice(self._previous, self._previous + MAX_EXPR_LENGTH - 1)
-            self.state[dst_slice] = self.state[1:MAX_EXPR_LENGTH]
-            self.state[1:MAX_EXPR_LENGTH].fill(0)
-            self._previous += self._current
-            self._current = 1
-        elif not done:
-            self._current += 1
+        _, reward, done, info = self.env.step(self.action(action))
+        if not done:
+            self.state[self.counter] = action
+            self.counter += 1
         return self.state, self.reward(reward), done, info
 
     def action(self, action: int) -> Token:
@@ -84,7 +73,7 @@ class AlphaEnvWrapper(gym.Wrapper):
     def reward(self, reward: float) -> float:
         return reward + REWARD_PER_STEP
 
-    def valid_action_mask(self) -> np.ndarray:
+    def action_masks(self) -> np.ndarray:
         res = np.zeros(SIZE_ACTION, dtype=bool)
         valid = self.env.valid_action_types()
         for i in range(OFFSET_OP, OFFSET_OP + SIZE_OP):
@@ -104,29 +93,35 @@ class AlphaEnvWrapper(gym.Wrapper):
         return res
 
 
-def AlphaEnv(*args, **kwargs):
-    return ActionMasker(AlphaEnvWrapper(AlphaEnvCore(*args, **kwargs)),
-                        lambda env: env.valid_action_mask())    # type: ignore
+def AlphaEnv(pool: AlphaPoolBase, **kwargs):
+    return AlphaEnvWrapper(AlphaEnvCore(pool=pool, **kwargs))
 
 
 if __name__ == '__main__':
-    env = AlphaEnv(
-        instrument="csi300",
-        start_time="2016-01-01",
-        end_time="2018-12-31"
-    )
+    close = Feature(FeatureType.CLOSE)
+    target = Ref(close, -20) / close - 1
+    device = torch.device('cuda:0')
+
+    data = StockData(instrument='csi300',
+                     start_time='2016-01-01',
+                     end_time='2018-12-31')
+    pool = AlphaPool(capacity=10,
+                     stock_data=data,
+                     target=target,
+                     ic_lower_bound=None)
+    env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     state = env.reset()
     actions = [
-        OFFSET_FEATURE + FeatureType.LOW,
-        OFFSET_OP + 5,  # Abs
-        OFFSET_DELTA_TIME + 1,
-        OFFSET_OP + 4,  # Ref
-        OFFSET_FEATURE + FeatureType.HIGH,
-        OFFSET_FEATURE + FeatureType.CLOSE,
-        OFFSET_OP + 3,  # Div
-        OFFSET_OP + 0,  # Add
-        OFFSET_SEP,
+        -1 + OFFSET_FEATURE + FeatureType.LOW,
+        -1 + OFFSET_OP + 0,  # Abs
+        -1 + OFFSET_DELTA_TIME + 1,
+        -1 + OFFSET_OP + 8,  # Ref
+        -1 + OFFSET_FEATURE + FeatureType.HIGH,
+        -1 + OFFSET_FEATURE + FeatureType.CLOSE,
+        -1 + OFFSET_OP + 5,  # Div
+        -1 + OFFSET_OP + 2,  # Add
+        -1 + OFFSET_SEP,
     ]
     for action in actions:
         print(env.step(action)[:-1])
