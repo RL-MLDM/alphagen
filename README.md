@@ -2,6 +2,8 @@
 
 Automatic formulaic alpha generation with reinforcement learning.
 
+**Note**: There is still some documentation that needs to be done on this (and only this) page, please wait several days for the complete instructions.
+
 ## How to reproduce?
 
 ### Data preparation
