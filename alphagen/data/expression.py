@@ -443,16 +443,3 @@ class Corr(PairRollingOperator):
         stdmul = (nlvar * nrvar).sqrt()
         stdmul[(nlvar < 1e-6) | (nrvar < 1e-6)] = 1
         return ncov / stdmul
-
-
-Operators: List[Type[Expression]] = [
-    # Unary
-    Abs, Sign, Log, CSRank,
-    # Binary
-    Add, Sub, Mul, Div, Pow, Greater, Less,
-    # Rolling
-    Ref, Mean, Sum, Std, Var, Skew, Kurt, Max, Min,
-    Med, Mad, Rank, Delta, WMA, EMA,
-    # Pair rolling
-    Cov, Corr
-]
