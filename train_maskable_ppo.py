@@ -8,10 +8,11 @@ from sb3_contrib.ppo_mask import MaskablePPO
 from stable_baselines3.common.callbacks import BaseCallback
 
 from alphagen.data.expression import *
-from alphagen.models.alpha_pool import AlphaPool, SingleAlphaPool
+from alphagen.models.alpha_pool import AlphaPool, SingleAlphaPool, AlphaPoolBase
 from alphagen.rl.env.wrapper import AlphaEnv
 from alphagen.rl.policy import LSTMSharedNet
 from alphagen.utils.random import reseed_everything
+from alphagen.rl.env.core import AlphaEnvCore
 
 
 class CustomCallback(BaseCallback):
@@ -56,12 +57,13 @@ class CustomCallback(BaseCallback):
         self.logger.record('pool/size', self.pool.size)
         self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
-        ic_valid, rank_ic_valid = self.pool.test_ensemble(self.valid_data, self.valid_target)
+        self.logger.record('pool/eval_cnt', self.env_core.eval_cnt)
+        # ic_valid, rank_ic_valid = self.pool.test_ensemble(self.valid_data, self.valid_target)
         ic_test, rank_ic_test = self.pool.test_ensemble(self.test_data, self.test_target)
-        self.logger.record('valid/ic', ic_valid)
-        self.logger.record('valid/rank_ic', rank_ic_valid)
-        self.logger.record('test/ic_', ic_test)
-        self.logger.record('test/rank_ic_', rank_ic_test)
+        # self.logger.record('valid/ic', ic_valid)
+        # self.logger.record('valid/rank_ic', rank_ic_valid)
+        self.logger.record('test/ic', ic_test)
+        self.logger.record('test/rank_ic', rank_ic_test)
         self.save_checkpoint()
 
     def save_checkpoint(self):
@@ -85,8 +87,12 @@ class CustomCallback(BaseCallback):
         print('---------------------------------------------')
 
     @property
-    def pool(self) -> AlphaPool:
-        return self.training_env.envs[0].unwrapped.pool     # type: ignore
+    def pool(self) -> AlphaPoolBase:
+        return self.env_core.pool
+
+    @property
+    def env_core(self) -> AlphaEnvCore:
+        return self.training_env.envs[0].unwrapped  # type: ignore
 
 
 def main(
@@ -133,7 +139,7 @@ def main(
     checkpoint_callback = CustomCallback(
         save_freq=10000,
         show_freq=10000,
-        save_path='./logs/',
+        save_path='/DATA/xuehy/logs/',
         valid_data=data_valid,
         valid_target=target,
         test_data=data_test,
@@ -158,7 +164,7 @@ def main(
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log=f'./tb_logs/ppo',
+        tensorboard_log=f'/DATA/xuehy/tb_logs/ppo',
         device=device,
         verbose=1,
     )
@@ -177,7 +183,7 @@ if __name__ == '__main__':
         50: 350_000,
         100: 400_000
     }
-    for capacity in [0, 10, 20, 50, 100]:
+    for capacity in [0, 10, 20, 50, 100][1:2]:
         for seed in range(10):
             for instruments in ["csi300", "csi500"]:
                 main(seed=seed, instruments=instruments, pool_capacity=capacity, steps=steps[capacity])

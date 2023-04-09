@@ -27,6 +27,8 @@ class AlphaEnvCore(gym.Env):
         self._print_expr = print_expr
         self._device = device
 
+        self.eval_cnt = 0
+
     def reset(
         self, *,
         seed: Optional[int] = None,
@@ -61,7 +63,9 @@ class AlphaEnvCore(gym.Env):
         if self._print_expr:
             print(expr)
         try:
-            return self.pool.try_new_expr(expr)
+            ret = self.pool.try_new_expr(expr)
+            self.eval_cnt += 1
+            return ret
         except OutOfDataRangeError:
             return 0.
 

@@ -42,7 +42,7 @@ class StockData:
             return
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_baostock_fwdadj", region=REG_CN)
+        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
