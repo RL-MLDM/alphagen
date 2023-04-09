@@ -65,6 +65,8 @@ class AlphaPool(AlphaPoolBase):
 
         self.ic_lower_bound = ic_lower_bound
 
+        self.eval_cnt = 0
+
     @property
     def device(self) -> torch.device:
         return self.data.device
@@ -105,6 +107,7 @@ class AlphaPool(AlphaPoolBase):
         increment = new_ic_ret - self.best_ic_ret
         if increment > 0:
             self.best_ic_ret = new_ic_ret
+        self.eval_cnt += 1
         return new_ic_ret
 
     def force_load_exprs(self, exprs: List[Expression]) -> None:

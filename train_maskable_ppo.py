@@ -57,7 +57,7 @@ class CustomCallback(BaseCallback):
         self.logger.record('pool/size', self.pool.size)
         self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
-        self.logger.record('pool/eval_cnt', self.env_core.eval_cnt)
+        self.logger.record('pool/eval_cnt', self.pool.eval_cnt)
         # ic_valid, rank_ic_valid = self.pool.test_ensemble(self.valid_data, self.valid_target)
         ic_test, rank_ic_test = self.pool.test_ensemble(self.test_data, self.test_target)
         # self.logger.record('valid/ic', ic_valid)
