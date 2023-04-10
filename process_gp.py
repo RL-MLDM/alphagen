@@ -1,18 +1,16 @@
+import json
+import os
+from collections import Counter
+from glob import glob
 from typing import Tuple, Dict
-import torch
+
 from alphagen.data.expression import *
 from alphagen.models.alpha_pool import AlphaPool
-from alphagen.utils.correlation import batch_pearsonr, batch_spearmanr
+from alphagen.utils.correlation import batch_pearsonr
 from alphagen.utils.random import reseed_everything
-import os
-from glob import glob
-import json
-from contextlib import redirect_stdout
-from tqdm import tqdm
-from collections import Counter
 
 devnull = open(os.devnull, 'w')
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 
 data: Dict[str, Tuple[StockData, StockData, StockData]] = {}
 
@@ -71,7 +69,7 @@ def main(
         }
 
     with open(in_path, "r") as f:
-        cache = json.load(f)
+        cache = json.load(f)['cache']
     cache = {k: v for k, v in cache.items() if v != 0.0 and v != -1.0}
 
     alphas = []
@@ -86,6 +84,7 @@ def main(
                     break
             if mutual > 0.7:
                 continue
+        print(expr)
         alphas.append((expr, values))
         if len(alphas) >= capacity:
             break
@@ -94,35 +93,21 @@ def main(
     pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
     evaluate(len(cache))
 
-    with open(out_path, "w") as f:
-        json.dump(results, f)
+    # with open(out_path, "w") as f:
+    #     json.dump(results, f)
 
     best = max(results.items(), key=lambda x: x[1]["valid_ic"])
-    print(f"Best (step={best[0]}): IC = {best[1]['test_ic']:.4f}, Rank IC = {best[1]['test_ric']:.4f}")
+    return f"Best (step={best[0]}): IC = {best[1]['test_ic']:.4f}, Rank IC = {best[1]['test_ric']:.4f}"
 
 
 if __name__ == "__main__":
-    train, valid, test = get_data("csi300")
-    dct = ([3, 1, 5, 6, 9, 2, 8, 7, 0, 4],
-            [157696, 215040, 174080, 98304, 243712,
-            344064, 126976, 155648, 628736, 120832])
-    for seed, step in zip(*dct):
-        dir = glob(f"logs/ppo_csi300_100_{seed}*")[0]
-        file = dir + f"/{step}_steps_pool.json"
-        with open(file, "r") as f:
-            js = json.load(f)
-        # js = list(js.values())[0]["pool"]
-        values = None
-        for e, w in zip(js["exprs"], js["weights"]):
-            expr = parse_expr(e)
-            v = w * AlphaPool._normalize_by_day(expr.evaluate(test))
-            values = v if values is None else values + v
-        assert values is not None
-        test.make_dataframe([values], ["score"])["score"].to_pickle(f"{seed}.pkl")
-    # for instruments in ["csi300", "csi500"]:
-    #     for seed in range(0, 10):
-    #         in_path = glob(f"logs/ppo_{instruments}_0_{seed}_*")[0]
-    #         in_path += "/251904_steps_pool.json"
-    #         for cap in [1]:
-    #             out_path = f"logs/ppo_{instruments}_baseline/filter_p{cap}_{seed}.json"
-    #             main(in_path, out_path, instruments, cap, seed, use_filtering=False)
+    seed = 4
+    in_path = glob(f"/DATA/xuehy/logs/gp_kdd_csi300_{seed}")[0]
+    in_path = in_path + '/40.json'
+    print(in_path)
+    res = []
+    for capacity in [10, 20, 50, 100]:
+        t = main(in_path=in_path, out_path='', capacity=capacity, seed=seed, use_filtering=True)
+        res.append(t)
+    for t in res:
+        print(t)

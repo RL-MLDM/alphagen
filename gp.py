@@ -1,7 +1,6 @@
 import json
-from collections import Counter
-from pprint import pprint
 import os
+from collections import Counter
 
 import numpy as np
 
@@ -70,12 +69,12 @@ for op in rolling_binary_ops:
 
 # with open('./logs/cache.json') as f:
 #     cache = json.load(f)
-instruments = "csi500"
-seed = 9
+instruments = "csi300"
+seed = 4
 reseed_everything(seed)
 
 cache = {}
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 data = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
 data_valid = StockData(instruments, '2019-01-01', '2019-12-31', device=device)
 data_test = StockData(instruments, '2020-01-01', '2021-12-31', device=device)
@@ -172,10 +171,11 @@ def ev():
         [{"pool": cap, "res": try_pool(cap)} for cap in (10, 20, 50, 100)]
     )
     print(res)
-    dir = f"./logs/gp_{instruments}_{seed}"
+    dir = f"/DATA/xuehy/logs/gp_kdd_{instruments}_{seed}"
     os.makedirs(dir, exist_ok=True)
-    with open_func(f'{dir}/{generation}.json', 'w') as f:
-        json.dump({"cache": cache, "res": res}, f)
+    if generation % 2 == 0:
+        with open_func(f'{dir}/{generation}.json', 'w') as f:
+            json.dump({"cache": cache, "res": res}, f)
 
 
 if __name__ == '__main__':
@@ -186,8 +186,8 @@ if __name__ == '__main__':
     X_train = np.array([all_tokens])
     y_train = np.array([[1]])
 
-    est_gp = SymbolicRegressor(population_size=2000,
-                               generations=60,
+    est_gp = SymbolicRegressor(population_size=1000,
+                               generations=40,
                                init_depth=(2, 6),
                                tournament_size=600,
                                stopping_criteria=1.,

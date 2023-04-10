@@ -133,7 +133,7 @@ def main(
         )
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
-    name_prefix = f"ppo_{instruments}_{pool_capacity}_{seed}"
+    name_prefix = f"kdd_{instruments}_{pool_capacity}_{seed}"
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
@@ -164,7 +164,7 @@ def main(
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log=f'/DATA/xuehy/tb_logs/ppo',
+        tensorboard_log=f'/DATA/xuehy/tb_logs/kdd',
         device=device,
         verbose=1,
     )
@@ -183,7 +183,7 @@ if __name__ == '__main__':
         50: 350_000,
         100: 400_000
     }
-    for capacity in [0, 10, 20, 50, 100][1:2]:
-        for seed in range(10):
-            for instruments in ["csi300", "csi500"]:
+    for capacity in [50]:
+        for seed in [3]:
+            for instruments in ["csi300"]:
                 main(seed=seed, instruments=instruments, pool_capacity=capacity, steps=steps[capacity])
