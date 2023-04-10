@@ -245,6 +245,83 @@ class AlphaPool(AlphaPoolBase):
         self.weights[i], self.weights[j] = self.weights[j], self.weights[i]
 
 
+class AlphaPoolMinICConstrained(AlphaPool):
+    def __init__(
+        self,
+        capacity: int,
+        stock_data: StockData,
+        target: Expression,
+        ic_lower_bound: float = 0.03
+    ):
+        super().__init__(capacity, stock_data, target, ic_lower_bound)
+        self.ic_lower_bound = ic_lower_bound
+
+    def try_new_expr(self, expr: Expression) -> float:
+        value = self._normalize_by_day(expr.evaluate(self.data))
+        ic_ret, ic_mut = self._calc_ics(value, ic_mut_threshold=0.99)
+        if ic_mut is None:
+            return ic_ret
+
+        self._add_factor(expr, value, ic_ret, ic_mut)
+        if self.size > 1:
+            new_weights = self._optimize(alpha=5e-3, lr=5e-4, n_iter=500)
+            worst_idx = np.argmin(np.abs(self.weights))
+            if worst_idx != self.capacity:
+                self.weights[:self.size] = new_weights
+                print(f"[Pool +] {expr}")
+                if self.size > self.capacity:
+                    print(f"[Pool -] {self.exprs[worst_idx]}")
+            self._pop()
+
+        new_ic_ret = self.evaluate_ensemble()
+        increment = new_ic_ret - self.best_ic_ret
+        if increment > 0:
+            self.best_ic_ret = new_ic_ret
+        return self.best_ic_ret
+
+    @property
+    def _under_thres_alpha(self) -> bool:
+        if self.ic_lower_bound is None or self.size > 1:
+            return False
+        return self.size == 0 or abs(self.single_ics[0]) < self.ic_lower_bound
+
+    def _calc_ics(
+        self,
+        value: Tensor,
+        ic_mut_threshold: Optional[float] = None
+    ) -> Tuple[float, Optional[List[float]]]:
+        single_ic = batch_pearsonr(value, self.target).mean().item()
+        if not self._under_thres_alpha and single_ic < self.ic_lower_bound:
+            return single_ic, None
+
+        mutual_ics = []
+        for i in range(self.size):
+            mutual_ic = batch_pearsonr(value, self.values[i]).mean().item()  # type: ignore
+            if ic_mut_threshold is not None and mutual_ic > ic_mut_threshold:
+                return single_ic, None
+            mutual_ics.append(mutual_ic)
+
+        return single_ic, mutual_ics
+
+    def _add_factor(
+        self,
+        expr: Expression,
+        value: Tensor,
+        ic_ret: float,
+        ic_mut: List[float]
+    ):
+        if self._under_thres_alpha and self.size == 1:
+            self._pop()
+        n = self.size
+        self.exprs[n] = expr
+        self.values[n] = value
+        self.single_ics[n] = ic_ret
+        for i in range(n):
+            self.mutual_ics[i][n] = self.mutual_ics[n][i] = ic_mut[i]
+        self.weights[n] = ic_ret  # An arbitrary init value
+        self.size += 1
+
+
 class SingleAlphaPool(AlphaPoolBase):
     def __init__(
         self,
