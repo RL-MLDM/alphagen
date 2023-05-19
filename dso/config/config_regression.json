@@ -1,0 +1,146 @@
+{
+   "task" : {
+      // Deep Symbolic Regression
+      "task_type" : "regression",
+
+      // This can either be (1) the name of the benchmark dataset (see
+      // benchmarks.csv for a list of supported benchmarks) or (2) a path to a
+      // CSV file containing the data.
+      "dataset" : "Nguyen-1",
+
+      // To customize a function set, edit this! See functions.py for a list of
+      // supported functions. Note "const" will add placeholder constants that
+      // will be optimized within the training loop. This will considerably
+      // increase runtime.
+      "function_set": ["add", "sub", "mul", "div", "sin", "cos", "exp", "log"],
+
+      // Metric to be used for the reward function. See regression.py for
+      // supported metrics.
+      "metric" : "inv_nrmse",
+      "metric_params" : [1.0],
+
+      // Optional alternate metric to be used at evaluation time.
+      "extra_metric_test" : null,
+      "extra_metric_test_params" : [],
+
+      // NRMSE threshold for early stopping. This is useful for noiseless
+      // benchmark problems when DSO discovers the true solution.
+      "threshold" : 1e-12,
+
+      // With protected=false, floating-point errors (e.g. log of negative
+      // number) will simply returns a minimal reward. With protected=true,
+      // "protected" functions will prevent floating-point errors, but may
+      // introduce discontinuities in the learned functions.      
+      "protected" : false,
+
+      // You can add artificial reward noise directly to the reward function.
+      // Note this does NOT add noise to the dataset.
+      "reward_noise" : 0.0,
+      "reward_noise_type" : "r",
+      "normalize_variance" : false,
+
+      // Set of thresholds (shared by all input variables) for building
+      // decision trees. Note that no StateChecker will be added to Library
+      // if decision_tree_threshold_set is an empty list or null.
+      "decision_tree_threshold_set" : [],
+
+      // Parameters for optimizing the "poly" token.
+      // Note: poly_optimizer is turned on if and only if "poly" is in function_set.
+      "poly_optimizer_params" : {
+         // The (maximal) degree of the polynomials used to fit the data
+         "degree": 3,
+         // Cutoff value for the coefficients of polynomials. Coefficients
+         // with magnitude less than this value will be regarded as 0.
+         "coef_tol": 1e-6,
+         // linear models from sklearn: linear_regression, lasso,
+         // and ridge are currently supported, or our own implementation
+         // of least squares regressor "dso_least_squares".
+         "regressor": "dso_least_squares",
+         "regressor_params": {
+            // Cutoff value for p-value of coefficients. Coefficients with 
+            // larger p-values are forced to zero.
+            "cutoff_p_value": 1.0,
+            // Maximum number of terms in the polynomial. If more coefficients are nonzero,
+            // coefficients with larger p-values will be forced to zero.
+            "n_max_terms": null,
+            // Cutoff value for the coefficients of polynomials. Coefficients
+            // with magnitude less than this value will be regarded as 0.
+            "coef_tol": 1e-6
+         }
+      }
+   },
+
+   // Only the key training hyperparameters are listed here. See
+   // config_common.json for the full list.
+   "training" : {
+      "n_samples" : 2000000,
+      "batch_size" : 1000,
+      "epsilon" : 0.05,
+
+      // Recommended to set this to as many cores as you can use! Especially if
+      // using the "const" token.
+      "n_cores_batch" : 1
+   },
+
+   // // Only the key Policy Optimizer hyperparameters are listed here. See
+   // // config_common.json for the full list.
+   "policy_optimizer" : {
+      "learning_rate" : 0.0005,
+      "entropy_weight" : 0.03,
+      "entropy_gamma" : 0.7,
+
+      // EXPERIMENTAL: Proximal policy optimization hyperparameters.
+      // "policy_optimizer_type" : "ppo",
+      // "ppo_clip_ratio" : 0.2,
+      // "ppo_n_iters" : 10,
+      // "ppo_n_mb" : 4,
+
+      // EXPERIMENTAL: Priority queue training hyperparameters.
+      // "policy_optimizer_type" : "pqt",
+      // "pqt_k" : 10,
+      // "pqt_batch_size" : 1,
+      // "pqt_weight" : 200.0,
+      // "pqt_use_pg" : false
+
+   },
+
+   // Hyperparameters related to including in situ priors and constraints. Each
+   // prior must explicitly be turned "on" or it will not be used. See
+   // config_common.json for descriptions of each prior.
+   "prior": {
+      "length" : {
+         "min_" : 4,
+         "max_" : 64,
+         "on" : true
+      },
+      "repeat" : {
+         "tokens" : "const",
+         "min_" : null,
+         "max_" : 3,
+         "on" : true
+      },
+      "inverse" : {
+         "on" : true
+      },
+      "trig" : {
+         "on" : true
+      },
+      "const" : {
+         "on" : true
+      },
+      "no_inputs" : {
+         "on" : true
+      },
+      "uniform_arity" : {
+         "on" : true
+      },
+      "soft_length" : {
+         "loc" : 10,
+         "scale" : 5,
+         "on" : true
+      },
+      "domain_range" : {
+         "on" : false
+      }
+   }
+}

@@ -1,0 +1,232 @@
+{
+   // Experiment configuration.
+   "experiment" : {
+
+      // Root directory to save results.
+      "logdir" : "./log",
+
+      // Save dir within logdir (will be set automatically to <task_name>_<timestamp> if null)
+      "exp_name" : null,
+
+      // Random number seed. Don't forget to change this for multiple runs!
+      "seed" : 0
+   },
+
+   // Task-specific hyperparameters. See task-specific configs (e.g.
+   // config_regression.json) for more info.
+   "task" : {
+
+      // Choice of ["regression", "control"].
+      "task_type" : null
+   },
+
+   // Hyperparameters related to the main training loop.
+   "training" : {
+
+      // These parameters control the length of the run.
+      "n_samples" : 2000000,
+      "batch_size" : 1000,
+
+      // To use the risk-seeking policy gradient, set epsilon < 1.0 and
+      // baseline="R_e"
+      "epsilon" : 0.05,
+      "baseline" : "R_e",
+
+      // Control variate parameters for vanilla policy gradient. If risk-seeking
+      // is used, these have no effect.
+      "alpha" : 0.5,
+      "b_jumpstart" : false,
+
+      // Number of cores to use when evaluating a batch of rewards. For batch
+      // runs using run.py and --runs > 1, this will be overridden to 1. For
+      // single runs, recommended to set this to as many cores as you can use!
+      "n_cores_batch" : 1,
+
+      // The complexity measure is only used to compute a Pareto front. It does
+      // not affect the optimization.
+      "complexity" : "token",
+
+      // The constant optimizer used to optimized each "const" token.
+      "const_optimizer" : "scipy",
+      "const_params" : {
+         "method" : "L-BFGS-B",
+         "options" : {
+            "gtol" : 1e-3
+         }
+      },
+      "verbose" : true,
+
+      // Debug level
+      "debug" : 0,
+
+      // Whether to stop early if success condition is met
+      "early_stopping" : true,
+
+      // EXPERIMENTAL: Hyperparameters related to utilizing a memory buffer.
+      "use_memory" : false,
+      "memory_capacity" : 1e3,
+      "warm_start" : null,
+      "memory_threshold" : null
+   },
+
+   // Parameters to control what outputs to save.
+   "logging" : {
+      "save_all_iterations" : false,
+      "save_summary" : false,
+      "save_positional_entropy" : false,
+      "save_pareto_front" : true,
+      "save_cache" : false,
+      "save_cache_r_min" : 0.9,
+      "save_freq" : 1,
+      "save_token_count" : false,
+      // Size of the "hall of fame" (top performers during training) to save.
+      "hof" : 100
+   },
+
+   // The State Manager defines the inputs to the Controller
+   "state_manager": {
+      "type" : "hierarchical",
+      // Observation hyperparameters
+      "observe_action" : false,
+      "observe_parent" : true,
+      "observe_sibling" : true,
+      "observe_dangling" : false,
+      "embedding" : false,
+      "embedding_size" : 8
+   },
+
+   // Hyperparameters related to the policy, i.e. parameterized distribution over objects.
+   "policy" : {
+      
+      // Type of policy
+      // "rnn" is equivalent to "dso.policy.rnn_policy:RNNPolicy"
+      "policy_type" : "rnn", 
+
+      // Maximum sequence length.
+      "max_length" : 64,
+      
+      // Policy parameters
+      "cell" : "lstm",
+      "num_layers" : 1,
+      "num_units" : 32,
+      "initializer" : "zeros"
+   },
+
+   // Hyperparameters related to the discrete distribution model over objects.
+   "policy_optimizer" : {
+
+      // Type of policy optimizer
+      // "pg" is equivalent to "dso.policy_optimizer.pg_policy_optimizer:PGPolicyOptimizer"
+      "policy_optimizer_type" : "pg", 
+
+      // Whether to compute TensorBoard summaries.
+      "summary" : false,
+
+      // Optimizer hyperparameters.
+      "learning_rate" : 0.001,
+      "optimizer" : "adam",
+
+      // Entropy regularizer hyperparameters.
+      "entropy_weight" : 0.005,
+      "entropy_gamma" : 1.0
+   },
+
+   // Hyperparameters related to genetic programming hybrid methods.
+   "gp_meld" : {
+      "run_gp_meld" : false,
+      "verbose" : false,
+      "generations" : 20,
+      "p_crossover" : 0.5,
+      "p_mutate" : 0.5,
+      "tournament_size" : 5,
+      "train_n" : 50,
+      "mutate_tree_max" : 3,
+      // Speeds up processing when doing expensive evaluations.
+      "parallel_eval" : false
+   },
+
+
+   // Hyperparameters related to including in situ priors and constraints. Each
+   // prior must explicitly be turned "on" or it will not be used.
+   "prior": {
+      // Whether to count number of constraints (useful diagnostic but has some overhead)
+      "count_constraints" : false,
+
+      // Generic constraint that [targets] cannot be the [relationship] of
+      // [effectors]. See prior.py for supported relationships.
+      "relational" : {
+         "targets" : [],
+         "effectors" : [],
+         "relationship" : null,
+         "on" : false
+      },
+
+      // Constrains expression length to fall between min_ and max_, inclusive.
+      "length" : {
+         "min_" : 4,
+         "max_" : 30,
+         "on" : false
+      },
+
+      // Constraints "const" to appear at most max_ times.
+      "repeat" : {
+         "tokens" : "const",
+         "min_" : null,
+         "max_" : 3,
+         "on" : false
+      },
+
+      // Prevents consecutive inverse unary operators, e.g. log(exp(x)).
+      "inverse" : {
+         "on" : false
+      },
+
+      // Prevents nested trig operators (e.g. sin(1 + cos(x))).
+      "trig" : {
+         "on" : false
+      },
+
+      // Prevents "const" from being the only child, e.g. sin(const) or
+      // add(const, const).
+      "const" : {
+         "on" : false
+      },
+
+      // Prevents expressions with no input variables, e.g. sin(1.0 + const).
+      "no_inputs" : {
+         "on" : false
+      },
+
+      // Uniform arity prior: the prior probabilities over arities is uniform.
+      "uniform_arity" : {
+         "on" : false
+      },
+
+      // Soft length prior: expressions are discouraged to have length far from
+      // loc.
+      "soft_length" : {
+         "loc" : 10,
+         "scale" : 5,
+         "on" : false
+      },
+
+      // Prevents first token if its range does not contain X range
+      // and prevents input variable X if its parent's domain does not contain X domain
+      "domain_range" : {
+         "on" : false
+      },
+
+      // Constraint on selection of multi-discrete actions
+      "multi_discrete" : {
+         "dense" : false,           // all action dims are filled
+         "ordered" : false,         // action dim in ascending order
+         "on" : false
+      }
+   },
+
+   // Postprocessing hyperparameters.
+   "postprocess" : {
+      "show_count" : 5,
+      "save_plots" : true
+   }
+}
