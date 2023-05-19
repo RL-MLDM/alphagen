@@ -97,37 +97,3 @@ class AlphaEnvCore(gym.Env):
 
     def render(self, mode='human'):
         pass
-
-
-if __name__ == '__main__':
-    from alphagen_qlib.stock_data import StockData
-
-    close = Feature(FeatureType.CLOSE)
-    target = Ref(close, -20) / close - 1
-    device = torch.device('cuda:0')
-
-    data = StockData(instrument='csi300',
-                     start_time='2016-01-01',
-                     end_time='2018-12-31')
-    pool = AlphaPool(capacity=10,
-                     stock_data=data,
-                     target=target,
-                     ic_lower_bound=None)
-    env = AlphaEnvCore(pool=pool, device=device, print_expr=True)
-
-    tokens = [
-        FeatureToken(FeatureType.LOW),
-        OperatorToken(Abs),
-        DeltaTimeToken(10),
-        OperatorToken(Ref),
-        FeatureToken(FeatureType.HIGH),
-        FeatureToken(FeatureType.CLOSE),
-        OperatorToken(Div),
-        OperatorToken(Add),
-        SEP_TOKEN,
-    ]
-
-    state = env.reset()
-    for token in tokens:
-        state, reward, done, info = env.step(token)
-        print(f'next_state: {state}, reward: {reward}, done: {done}, info: {info}')

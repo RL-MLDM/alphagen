@@ -95,33 +95,3 @@ class AlphaEnvWrapper(gym.Wrapper):
 
 def AlphaEnv(pool: AlphaPoolBase, **kwargs):
     return AlphaEnvWrapper(AlphaEnvCore(pool=pool, **kwargs))
-
-
-if __name__ == '__main__':
-    close = Feature(FeatureType.CLOSE)
-    target = Ref(close, -20) / close - 1
-    device = torch.device('cuda:0')
-
-    data = StockData(instrument='csi300',
-                     start_time='2016-01-01',
-                     end_time='2018-12-31')
-    pool = AlphaPool(capacity=10,
-                     stock_data=data,
-                     target=target,
-                     ic_lower_bound=None)
-    env = AlphaEnv(pool=pool, device=device, print_expr=True)
-
-    state = env.reset()
-    actions = [
-        -1 + OFFSET_FEATURE + FeatureType.LOW,
-        -1 + OFFSET_OP + 0,  # Abs
-        -1 + OFFSET_DELTA_TIME + 1,
-        -1 + OFFSET_OP + 8,  # Ref
-        -1 + OFFSET_FEATURE + FeatureType.HIGH,
-        -1 + OFFSET_FEATURE + FeatureType.CLOSE,
-        -1 + OFFSET_OP + 5,  # Div
-        -1 + OFFSET_OP + 2,  # Add
-        -1 + OFFSET_SEP,
-    ]
-    for action in actions:
-        print(env.step(action)[:-1])

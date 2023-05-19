@@ -54,7 +54,7 @@ class AlphaPool(AlphaPoolBase):
         ic_lower_bound: Optional[float] = None
     ):
         super().__init__(capacity, stock_data, target)
-        
+
         self.size: int = 0
         self.exprs: List[Optional[Expression]] = [None for _ in range(capacity + 1)]
         self.values: List[Optional[Tensor]] = [None for _ in range(capacity + 1)]

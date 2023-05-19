@@ -1,18 +1,6 @@
-from typing import Generic, TypeVar, Callable, Tuple, Optional
+from typing import Tuple, Optional
 import torch
 from torch import nn, Tensor
-
-
-_TIn = TypeVar("_TIn")
-_TOut = TypeVar("_TOut")
-
-
-class MapperModule(nn.Module, Generic[_TIn, _TOut]):
-    def __init__(self, mapper: Callable[[_TIn], _TOut]) -> None:
-        super().__init__()
-        self.mapper = mapper
-
-    def forward(self, input: _TIn) -> _TOut: return self.mapper(input)
 
 
 def masked_mean_std(
@@ -35,3 +23,11 @@ def masked_mean_std(
     mean = x.sum(dim=1) / n
     std = ((((x - mean[:, None]) * ~mask) ** 2).sum(dim=1) / n).sqrt()
     return mean, std
+
+
+def normalize_by_day(value: Tensor) -> Tensor:
+    mean, std = masked_mean_std(value)
+    value = (value - mean[:, None]) / std[:, None]
+    nan_mask = torch.isnan(value)
+    value[nan_mask] = 0.
+    return value

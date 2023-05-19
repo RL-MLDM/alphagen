@@ -133,8 +133,8 @@ class Operator(Expression):
 
 
 class UnaryOperator(Operator):
-    def __init__(self, operand: Expression) -> None:
-        self._operand = operand
+    def __init__(self, operand: Union[Expression, float]) -> None:
+        self._operand = operand if isinstance(operand, Expression) else Constant(operand)
 
     @classmethod
     def n_args(cls) -> int: return 1
@@ -156,9 +156,9 @@ class UnaryOperator(Operator):
 
 
 class BinaryOperator(Operator):
-    def __init__(self, lhs: Expression, rhs: Expression) -> None:
-        self._lhs = lhs
-        self._rhs = rhs
+    def __init__(self, lhs: Union[Expression, float], rhs: Union[Expression, float]) -> None:
+        self._lhs = lhs if isinstance(lhs, Expression) else Constant(lhs)
+        self._rhs = rhs if isinstance(rhs, Expression) else Constant(rhs)
 
     @classmethod
     def n_args(cls) -> int: return 2
@@ -180,8 +180,8 @@ class BinaryOperator(Operator):
 
 
 class RollingOperator(Operator):
-    def __init__(self, operand: Expression, delta_time: Union[int, DeltaTime]) -> None:
-        self._operand = operand
+    def __init__(self, operand: Union[Expression, float], delta_time: Union[int, DeltaTime]) -> None:
+        self._operand = operand if isinstance(operand, Expression) else Constant(operand)
         if isinstance(delta_time, DeltaTime):
             delta_time = delta_time._delta_time
         self._delta_time = delta_time
@@ -216,8 +216,8 @@ class PairRollingOperator(Operator):
     def __init__(self,
                  lhs: Expression, rhs: Expression,
                  delta_time: Union[int, DeltaTime]) -> None:
-        self._lhs = lhs
-        self._rhs = rhs
+        self._lhs = lhs if isinstance(lhs, Expression) else Constant(lhs)
+        self._rhs = rhs if isinstance(rhs, Expression) else Constant(rhs)
         if isinstance(delta_time, DeltaTime):
             delta_time = delta_time._delta_time
         self._delta_time = delta_time

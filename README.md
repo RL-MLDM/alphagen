@@ -2,7 +2,7 @@
 
 Automatic formulaic alpha generation with reinforcement learning.
 
-**Note**: There is still some documentation that needs to be done on this (and only this) page, please wait several days for the complete instructions.
+Paper *Generating Synergistic Formulaic Alpha Collections via Reinforcement Learning* accepted by [KDD 2023](https://kdd.org/kdd2023/), Applied Data Science (ADS) track, more info TBD.
 
 ## How to reproduce?
 
@@ -33,4 +33,43 @@ Simply run [train_maskable_ppo.py](train_maskable_ppo.py), or DIY if you underst
 
 ### After running
 
+- Model checkpoints and alpha pools are located in `save_path`;
+    - The model is compatiable with [stable-baselines3](https://github.com/DLR-RM/stable-baselines3)
+    - Alpha pools are formatted in human-readable JSON.
+- Tensorboard logs are located in `tensorboard_log`.
 
+## Baselines
+
+### GP-based methods
+
+[gplearn](https://github.com/trevorstephens/gplearn) implements Genetic Programming, a commonly used method for symbolic regression. We maintained a modified version of gplearn to make it compatiable with our task. The corresponding experiment scipt is [gp.py](gp.py)
+
+### Deep Symbolic Regression
+
+[DSO](https://github.com/brendenpetersen/deep-symbolic-optimization) is a mature deep learning framework for symbolic optimization tasks. We maintained a minimal version of DSO to make it compatiable with our task. The corresponding experiment scipt is [dso.py](dso.py)
+
+## Repository Structure
+
+- `/alphagen` contains the basic data structures and the essential modules for starting an alpha mining pipeline;
+- `/alphagen_qlib` contains the qlib-specific APIs for data preparation;
+- `/alphagen_generic` contains data structures and utils designed for our baselines, which basically follow [gplearn](https://github.com/trevorstephens/gplearn) APIs, but with modifications for quant pipeline;
+- `/gplearn` and `/dso` contains modified versions of our baselines.
+
+## Citing our work
+
+```bibtex
+TBD
+```
+
+## Contributing
+
+Feel free to submit Issues or Pull requests.
+
+## Contributors
+
+This work is maintained by the MLDM research group, [IIP, ICT, CAS](http://iip.ict.ac.cn/).
+
+Contributors include:
+
+- [Hongyan Xue](https://github.com/xuehongyanL)
+- [Shuo Yu](https://github.com/Chlorie)

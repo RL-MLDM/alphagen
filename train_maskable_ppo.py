@@ -48,8 +48,6 @@ class CustomCallback(BaseCallback):
             os.makedirs(self.save_path, exist_ok=True)
 
     def _on_step(self) -> bool:
-        # if self.n_calls % self.show_freq == 0:
-        #     self. show_pool_state()
         return True
 
     def _on_rollout_end(self) -> None:
@@ -58,10 +56,7 @@ class CustomCallback(BaseCallback):
         self.logger.record('pool/significant', (np.abs(self.pool.weights[:self.pool.size]) > 1e-4).sum())
         self.logger.record('pool/best_ic_ret', self.pool.best_ic_ret)
         self.logger.record('pool/eval_cnt', self.pool.eval_cnt)
-        # ic_valid, rank_ic_valid = self.pool.test_ensemble(self.valid_data, self.valid_target)
         ic_test, rank_ic_test = self.pool.test_ensemble(self.test_data, self.test_target)
-        # self.logger.record('valid/ic', ic_valid)
-        # self.logger.record('valid/rank_ic', rank_ic_valid)
         self.logger.record('test/ic', ic_test)
         self.logger.record('test/rank_ic', rank_ic_test)
         self.save_checkpoint()
@@ -117,20 +112,12 @@ def main(
                           start_time='2020-01-01',
                           end_time='2021-12-31')
 
-    if pool_capacity == 0:
-        pool = SingleAlphaPool(
-            capacity=pool_capacity,
-            stock_data=data,
-            target=target,
-            ic_lower_bound=None
-        )
-    else:
-        pool = AlphaPool(
-            capacity=pool_capacity,
-            stock_data=data,
-            target=target,
-            ic_lower_bound=None
-        )
+    pool = AlphaPool(
+        capacity=pool_capacity,
+        stock_data=data,
+        target=target,
+        ic_lower_bound=None
+    )
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
     name_prefix = f"kdd_{instruments}_{pool_capacity}_{seed}"
@@ -139,7 +126,7 @@ def main(
     checkpoint_callback = CustomCallback(
         save_freq=10000,
         show_freq=10000,
-        save_path='/DATA/xuehy/logs/',
+        save_path='/path/for/checkpoints',
         valid_data=data_valid,
         valid_target=target,
         test_data=data_test,
@@ -164,7 +151,7 @@ def main(
         gamma=1.,
         ent_coef=0.01,
         batch_size=128,
-        tensorboard_log=f'/DATA/xuehy/tb_logs/kdd',
+        tensorboard_log='/path/for/tb/log',
         device=device,
         verbose=1,
     )
@@ -177,13 +164,12 @@ def main(
 
 if __name__ == '__main__':
     steps = {
-        0: 250_000,
         10: 250_000,
         20: 300_000,
         50: 350_000,
         100: 400_000
     }
-    for capacity in [50]:
-        for seed in [3]:
+    for capacity in [10, 20, 30, 50]:
+        for seed in range(5):
             for instruments in ["csi300"]:
                 main(seed=seed, instruments=instruments, pool_capacity=capacity, steps=steps[capacity])
