@@ -4,6 +4,8 @@ Automatic formulaic alpha generation with reinforcement learning.
 
 Paper *Generating Synergistic Formulaic Alpha Collections via Reinforcement Learning* accepted by [KDD 2023](https://kdd.org/kdd2023/), Applied Data Science (ADS) track, more info TBD.
 
+Preprint available on [arXiv](https://arxiv.org/abs/2306.12964).
+
 ## How to reproduce?
 
 ### Data preparation
