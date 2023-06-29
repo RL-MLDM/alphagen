@@ -4,7 +4,7 @@ __pycache__
 .DS_STORE
 playground.ipynb
 playground.py
-data/
+^data/
 out/
 logs/
 tb_logs/
