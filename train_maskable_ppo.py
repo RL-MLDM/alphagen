@@ -129,7 +129,7 @@ def main(
         show_freq=10000,
         save_path='/path/for/checkpoints',
         valid_calculator=calculator_valid,
-        test_calculator=calculator_train,
+        test_calculator=calculator_test,
         name_prefix=name_prefix,
         timestamp=timestamp,
         verbose=1,
