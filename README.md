@@ -8,24 +8,61 @@ Preprint available on [arXiv](https://arxiv.org/abs/2306.12964).
 
 ## How to reproduce?
 
-### Data preparation
+Note that you can either use our builtin alpha calculation pipeline(see Choice 1), or implement an adapter to your own pipeline(see Choice 2).
+
+### Choice 1: Stock data preparation
+
+Builtin pipeline requires Qlib library and local-storaged stock data.
 
 - We need some of the metadata (but not the actual stock price/volume data) given by Qlib, so follow the data preparing process in [Qlib](https://github.com/microsoft/qlib#data-preparation) first.
 - The actual stock data we use are retrieved from [baostock](http://baostock.com/baostock/index.php/%E9%A6%96%E9%A1%B5), due to concerns on the timeliness and truthfulness of the data source used by Qlib.
 - The data can be downloaded by running the script `data_collection/fetch_baostock_data.py`. The newly downloaded data is saved into `~/.qlib/qlib_data/cn_data_baostock_fwdadj` by default. This path can be customized to fit your specific needs, but make sure to use the correct path when loading the data (In `alphagen_qlib/stock_data.py`, function `StockData._init_qlib`, the path should be passed to qlib with `qlib.init(provider_uri=path)`).
 
+### Choice 2: Adapt to external pipelines
+
+Maybe you have better implements of alpha calculation, you can implement an adapter of `alphagen.data.calculator.AlphaCalculator`. The interface is defined as follows:
+
+```python
+class AlphaCalculator(metaclass=ABCMeta):
+    @abstractmethod
+    def calc_single_IC_ret(self, expr: Expression) -> float:
+        'Calculate IC between a single alpha and a predefined target.'
+
+    @abstractmethod
+    def calc_mutual_IC(self, expr1: Expression, expr2: Expression) -> float:
+        'Calculate IC between two alphas.'
+
+    @abstractmethod
+    def calc_pool_IC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
+        'First combine the alphas linearly,'
+        'then Calculate IC between the linear combination and a predefined target.'
+
+    @abstractmethod
+    def calc_pool_rIC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
+        'First combine the alphas linearly,'
+        'then Calculate Rank IC between the linear combination and a predefined target.'
+```
+
+Reminder: the values evaluated from different alphas may have drastically different scales, we recommend that you should normalize them before combination.
+
 ### Before running
 
-All principle components of our expriment are located in [train_maskable_ppo.py](train_maskable_ppo.py). You should focus on the following parameters:
+All principle components of our expriment are located in [train_maskable_ppo.py](train_maskable_ppo.py).
+
+These parameters may help you build an `AlphaCalculator`:
 
 - instruments (Set of instruments)
+- start_time & end_time (Data range for each dataset)
+- target (Target stock trend, e.g., 20d return rate)
+
+These parameters will define a RL run:
+
 - pool_capacity (Size of combination model)
 - steps (Limit of RL steps)
 - batch_size (PPO batch size)
 - features_extractor_kwargs (Arguments for LSTM shared net)
 - seed (Random seed)
 - device (PyTorch device)
-- start_time & end_time (Data range for each dataset)
 - save_path (Path for checkpoints)
 - tensorboard_log (Path for TensorBoard)
 
