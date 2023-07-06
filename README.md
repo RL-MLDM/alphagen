@@ -1,5 +1,9 @@
 # AlphaGen
 
+<p align="center">
+    <img src="images/logo.jpg" width=275 />
+</p>
+
 Automatic formulaic alpha generation with reinforcement learning.
 
 Paper *Generating Synergistic Formulaic Alpha Collections via Reinforcement Learning* accepted by [KDD 2023](https://kdd.org/kdd2023/), Applied Data Science (ADS) track, more info TBD.
