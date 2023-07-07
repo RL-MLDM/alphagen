@@ -112,7 +112,11 @@ Feel free to submit Issues or Pull requests.
 
 This work is maintained by the MLDM research group, [IIP, ICT, CAS](http://iip.ict.ac.cn/).
 
-Contributors include:
+Maintainers include:
 
 - [Hongyan Xue](https://github.com/xuehongyanL)
 - [Shuo Yu](https://github.com/Chlorie)
+
+Thanks to the following contributors:
+
+- [@yigaza](https://github.com/yigaza)

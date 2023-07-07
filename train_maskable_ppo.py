@@ -117,7 +117,8 @@ def main(
     pool = AlphaPool(
         capacity=pool_capacity,
         calculator=calculator_train,
-        ic_lower_bound=None
+        ic_lower_bound=None,
+        l1_alpha=5e-3
     )
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 

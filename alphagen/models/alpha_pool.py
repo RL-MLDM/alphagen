@@ -1,4 +1,5 @@
 from itertools import count
+import math
 from typing import List, Optional, Tuple, Set
 from abc import ABCMeta, abstractmethod
 
@@ -40,6 +41,7 @@ class AlphaPool(AlphaPoolBase):
         capacity: int,
         calculator: AlphaCalculator,
         ic_lower_bound: Optional[float] = None,
+        l1_alpha: float = 5e-3,
         device: torch.device = torch.device('cpu')
     ):
         super().__init__(capacity, calculator, device)
@@ -52,6 +54,7 @@ class AlphaPool(AlphaPoolBase):
         self.best_ic_ret: float = -1.
 
         self.ic_lower_bound = ic_lower_bound or -1.
+        self.l1_alpha = l1_alpha
 
         self.eval_cnt = 0
 
@@ -72,12 +75,12 @@ class AlphaPool(AlphaPoolBase):
 
     def try_new_expr(self, expr: Expression) -> float:
         ic_ret, ic_mut = self._calc_ics(expr, ic_mut_threshold=0.99)
-        if ic_ret is None or ic_mut is None:
+        if ic_ret is None or ic_mut is None or np.isnan(ic_ret) or np.isnan(ic_mut).any():
             return 0.
 
         self._add_factor(expr, ic_ret, ic_mut)
         if self.size > 1:
-            new_weights = self._optimize(alpha=5e-3, lr=5e-4, n_iter=500)
+            new_weights = self._optimize(alpha=self.l1_alpha, lr=5e-4, n_iter=500)
             worst_idx = np.argmin(np.abs(new_weights))
             if worst_idx != self.capacity:
                 self.weights[:self.size] = new_weights
@@ -96,9 +99,12 @@ class AlphaPool(AlphaPoolBase):
             assert ic_ret is not None and ic_mut is not None
             self._add_factor(expr, ic_ret, ic_mut)
             assert self.size <= self.capacity
-        self._optimize(alpha=5e-3, lr=5e-4, n_iter=500)
+        self._optimize(alpha=self.l1_alpha, lr=5e-4, n_iter=500)
 
     def _optimize(self, alpha: float, lr: float, n_iter: int) -> np.ndarray:
+        if math.isclose(alpha, 0.): # no L1 regularization
+            return self._optimize_lstsq() # very fast
+
         ics_ret = torch.from_numpy(self.single_ics[:self.size]).to(self.device)
         ics_mut = torch.from_numpy(self.mutual_ics[:self.size, :self.size]).to(self.device)
         weights = torch.from_numpy(self.weights[:self.size]).to(self.device).requires_grad_()
@@ -133,6 +139,12 @@ class AlphaPool(AlphaPoolBase):
                 break
 
         return best_weights
+
+    def _optimize_lstsq(self) -> np.ndarray:
+        try:
+            return np.linalg.lstsq(self.mutual_ics[:self.size, :self.size],self.single_ics[:self.size])[0]
+        except (np.linalg.LinAlgError, ValueError):
+            return self.weights[:self.size]
 
     def test_ensemble(self, calculator: AlphaCalculator) -> Tuple[float, float]:
         ic = calculator.calc_pool_IC_ret(self.exprs[:self.size], self.weights[:self.size])
