@@ -432,7 +432,7 @@ class Cov(PairRollingOperator):
         crhs = rhs - rhs.mean(dim=-1, keepdim=True)
         return (clhs * crhs).sum(dim=-1) / (n - 1)
 
-    
+
 class Corr(PairRollingOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor:
         clhs = lhs - lhs.mean(dim=-1, keepdim=True)
@@ -445,6 +445,7 @@ class Corr(PairRollingOperator):
         return ncov / stdmul
 
 
+# Deprecated!
 Operators: List[Type[Expression]] = [
     # Unary
     Abs, Sign, Log, CSRank,
