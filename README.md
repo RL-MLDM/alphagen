@@ -98,6 +98,10 @@ Simply run [train_maskable_ppo.py](train_maskable_ppo.py), or DIY if you underst
 - `/alphagen_generic` contains data structures and utils designed for our baselines, which basically follow [gplearn](https://github.com/trevorstephens/gplearn) APIs, but with modifications for quant pipeline;
 - `/gplearn` and `/dso` contains modified versions of our baselines.
 
+## Trading (Experimental)
+
+We implemented some trading strategies based on Qlib. See [backtest.py](backtest.py) and [trade_decision.py](trade_decision.py) for demos.
+
 ## Citing our work
 
 ```bibtex
