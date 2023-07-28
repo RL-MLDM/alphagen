@@ -11,7 +11,7 @@ from contextlib import redirect_stdout
 import baostock as bs
 from baostock.data.resultset import ResultData
 
-from .qlib_dump_bin import DumpDataAll
+from qlib_dump_bin import DumpDataAll
 
 
 def _read_all_text(path: str) -> str:
@@ -50,7 +50,7 @@ class DataManager:
         qlib_export_path: str,
         qlib_base_data_path: Optional[str],
         forward_adjust_date: str = "2023-01-15",
-        max_workers: int = 40,
+        max_workers: int = 10,
     ):
         self._save_path = os.path.expanduser(save_path)
         self._export_path = f"{self._save_path}/export"
@@ -265,9 +265,12 @@ class DataManager:
 
 
 if __name__ == "__main__":
+    today = str(datetime.date.today())
+    print(f"Forward adjust date: {today}")
     dm = DataManager(
-        save_path="./data",
-        qlib_export_path="~/.qlib/qlib_data/cn_data_baostock_fwdadj",
-        qlib_base_data_path="~/.qlib/qlib_data/cn_data"
+        save_path="~/.qlib/tmp",
+        qlib_export_path="~/.qlib/qlib_data/cn_data_rolling",
+        qlib_base_data_path="~/.qlib/qlib_data/cn_data",
+        forward_adjust_date=today,
     )
     dm.fetch_and_save_data()

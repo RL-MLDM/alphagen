@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from torch import Tensor
 import torch
 from alphagen.data.calculator import AlphaCalculator
@@ -9,9 +9,13 @@ from alphagen_qlib.stock_data import StockData
 
 
 class QLibStockDataCalculator(AlphaCalculator):
-    def __init__(self, data: StockData, target: Expression):
+    def __init__(self, data: StockData, target: Optional[Expression]):
         self.data = data
-        self.target_value = normalize_by_day(target.evaluate(self.data))
+
+        if target is None: # Combination-only mode
+            self.target_value = None
+        else:
+            self.target_value = normalize_by_day(target.evaluate(self.data))
 
     def _calc_alpha(self, expr: Expression) -> Tensor:
         return normalize_by_day(expr.evaluate(self.data))
@@ -22,7 +26,7 @@ class QLibStockDataCalculator(AlphaCalculator):
     def _calc_rIC(self, value1: Tensor, value2: Tensor) -> float:
         return batch_spearmanr(value1, value2).mean().item()
 
-    def _make_ensemble_alpha(self, exprs: List[Expression], weights: List[float]) -> Tensor:
+    def make_ensemble_alpha(self, exprs: List[Expression], weights: List[float]) -> Tensor:
         n = len(exprs)
         factors: List[Tensor] = [self._calc_alpha(exprs[i]) * weights[i] for i in range(n)]
         return sum(factors)  # type: ignore
@@ -37,12 +41,12 @@ class QLibStockDataCalculator(AlphaCalculator):
 
     def calc_pool_IC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
         with torch.no_grad():
-            ensemble_value = self._make_ensemble_alpha(exprs, weights)
+            ensemble_value = self.make_ensemble_alpha(exprs, weights)
             ic = batch_pearsonr(ensemble_value, self.target_value).mean().item()
             return ic
 
     def calc_pool_rIC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
         with torch.no_grad():
-            ensemble_value = self._make_ensemble_alpha(exprs, weights)
+            ensemble_value = self.make_ensemble_alpha(exprs, weights)
             rank_ic = batch_spearmanr(ensemble_value, self.target_value).mean().item()
             return rank_ic

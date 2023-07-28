@@ -42,7 +42,7 @@ class StockData:
             return
         import qlib
         from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data", region=REG_CN)
+        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_rolling", region=REG_CN)
         cls._qlib_initialized = True
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
@@ -111,7 +111,10 @@ class StockData:
         if len(columns) != n_columns:
             raise ValueError(f"size of columns ({len(columns)}) doesn't match with "
                              f"tensor feature count ({data.shape[2]})")
-        date_index = self._dates[self.max_backtrack_days:-self.max_future_days]
+        if self.max_future_days == 0:
+            date_index = self._dates[self.max_backtrack_days:]
+        else:
+            date_index = self._dates[self.max_backtrack_days:-self.max_future_days]
         index = pd.MultiIndex.from_product([date_index, self._stock_ids])
         data = data.reshape(-1, n_columns)
         return pd.DataFrame(data.detach().cpu().numpy(), index=index, columns=columns)
