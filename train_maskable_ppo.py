@@ -1,7 +1,8 @@
 import json
 import os
-from typing import Optional
+from typing import Optional, Tuple
 from datetime import datetime
+import fire
 
 import numpy as np
 from sb3_contrib.ppo_mask import MaskablePPO
@@ -102,14 +103,14 @@ def main(
 
     # You can re-implement AlphaCalculator instead of using QLibStockDataCalculator.
     data_train = StockData(instrument=instruments,
-                           start_time='2009-01-01',
-                           end_time='2018-12-31')
-    data_valid = StockData(instrument=instruments,
-                           start_time='2019-01-01',
+                           start_time='2010-01-01',
                            end_time='2019-12-31')
+    data_valid = StockData(instrument=instruments,
+                           start_time='2020-01-01',
+                           end_time='2020-12-31')
     data_test = StockData(instrument=instruments,
-                          start_time='2020-01-01',
-                          end_time='2021-12-31')
+                          start_time='2021-01-01',
+                          end_time='2022-12-31')
     calculator_train = QLibStockDataCalculator(data_train, target)
     calculator_valid = QLibStockDataCalculator(data_valid, target)
     calculator_test = QLibStockDataCalculator(data_test, target)
@@ -122,7 +123,7 @@ def main(
     )
     env = AlphaEnv(pool=pool, device=device, print_expr=True)
 
-    name_prefix = f"kdd_{instruments}_{pool_capacity}_{seed}"
+    name_prefix = f"new_{instruments}_{pool_capacity}_{seed}"
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
 
     checkpoint_callback = CustomCallback(
@@ -162,14 +163,27 @@ def main(
     )
 
 
-if __name__ == '__main__':
-    steps = {
+def fire_helper(
+    seed: Union[int, Tuple[int]],
+    code: str,
+    pool: int,
+    step: int = None
+):
+    if isinstance(seed, int):
+        seed = (seed, )
+    default_steps = {
         10: 250_000,
         20: 300_000,
         50: 350_000,
         100: 400_000
     }
-    for capacity in [10, 20, 30, 50]:
-        for seed in range(5):
-            for instruments in ["csi300"]:
-                main(seed=seed, instruments=instruments, pool_capacity=capacity, steps=steps[capacity])
+    for _seed in seed:
+        main(_seed,
+             code,
+             pool,
+             default_steps[int(pool)] if step is None else int(step)
+             )
+
+
+if __name__ == '__main__':
+    fire.Fire(fire_helper)
