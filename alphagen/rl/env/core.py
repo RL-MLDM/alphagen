@@ -1,5 +1,5 @@
 from typing import Tuple, Optional
-import gym
+import gymnasium as gym
 import math
 
 from alphagen.config import MAX_EXPR_LENGTH
@@ -29,6 +29,8 @@ class AlphaEnvCore(gym.Env):
 
         self.eval_cnt = 0
 
+        self.render_mode = None
+
     def reset(
         self, *,
         seed: Optional[int] = None,
@@ -40,7 +42,7 @@ class AlphaEnvCore(gym.Env):
         self._builder = ExpressionBuilder()
         return self._tokens, self._valid_action_types()
 
-    def step(self, action: Token) -> Tuple[List[Token], float, bool, dict]:
+    def step(self, action: Token) -> Tuple[List[Token], float, bool, bool, dict]:
         if (isinstance(action, SequenceIndicatorToken) and
                 action.indicator == SequenceIndicatorType.SEP):
             reward = self._evaluate()
@@ -56,7 +58,9 @@ class AlphaEnvCore(gym.Env):
 
         if math.isnan(reward):
             reward = 0.
-        return self._tokens, reward, done, self._valid_action_types()
+
+        truncated = False  # Fk gymnasium
+        return self._tokens, reward, done, truncated, self._valid_action_types()
 
     def _evaluate(self):
         expr: Expression = self._builder.get_tree()

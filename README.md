@@ -61,18 +61,19 @@ These parameters may help you build an `AlphaCalculator`:
 
 These parameters will define a RL run:
 
-- pool_capacity (Size of combination model)
-- steps (Limit of RL steps)
 - batch_size (PPO batch size)
 - features_extractor_kwargs (Arguments for LSTM shared net)
-- seed (Random seed)
 - device (PyTorch device)
 - save_path (Path for checkpoints)
 - tensorboard_log (Path for TensorBoard)
 
 ### Run!
 
-Simply run [train_maskable_ppo.py](train_maskable_ppo.py), or DIY if you understand our code well.
+```shell
+python train_maskable_ppo.py --seed=SEED --pool=POOL_CAPACITY --code=INSTRUMENTS --step=NUM_STEPS
+```
+
+Where `SEED` is random seed, e.g., `1` or `1,2`, `POOL_CAPACITY` is the size of combination model and, `NUM_STEPS` is the limit of RL steps.
 
 ### After running
 
