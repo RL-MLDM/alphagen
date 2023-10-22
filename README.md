@@ -131,3 +131,7 @@ Maintainers include:
 Thanks to the following contributors:
 
 - [@yigaza](https://github.com/yigaza)
+
+Thanks to the following in-depth research on our project:
+
+- *因子选股系列之九十五:DFQ强化学习因子组合挖掘系统*
