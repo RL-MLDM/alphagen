@@ -1,6 +1,7 @@
 import numpy as np
 
 from alphagen.data.expression import *
+from alphagen_qlib.calculator import QLibStockDataCalculator
 from dso import DeepSymbolicRegressor
 from dso.library import Token, HardCodedConstant
 from dso import functions
@@ -25,9 +26,12 @@ reseed_everything(seed)
 
 cache = {}
 device = torch.device('cuda:0')
-data = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
+data_train = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
 data_valid = StockData(instruments, '2019-01-01', '2019-12-31', device=device)
 data_test = StockData(instruments, '2020-01-01', '2021-12-31', device=device)
+calculator_train = QLibStockDataCalculator(data_train, target)
+calculator_valid = QLibStockDataCalculator(data_valid, target)
+calculator_test = QLibStockDataCalculator(data_test, target)
 
 
 if __name__ == '__main__':
@@ -35,7 +39,9 @@ if __name__ == '__main__':
     y = np.array([[1]])
     functions.function_map = funcs
 
-    pool = AlphaPool(capacity=10, stock_data=data, target=target, ic_lower_bound=None)
+    pool = AlphaPool(capacity=10,
+                     calculator=calculator_train,
+                     ic_lower_bound=None)
 
     class Ev:
         def __init__(self, pool):
@@ -52,7 +58,7 @@ if __name__ == '__main__':
             finally:
                 self.cnt += 1
                 if self.cnt % 100 == 0:
-                    test_ic = pool.test_ensemble(data_test, target)[0]
+                    test_ic = pool.test_ensemble(calculator_test)[0]
                     self.results[self.cnt] = test_ic
                     print(self.cnt, test_ic)
                 return ret
