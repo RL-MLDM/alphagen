@@ -33,6 +33,14 @@ class AlphaCalculator(metaclass=ABCMeta):
         'Calculate IC between a single alpha and a predefined target.'
 
     @abstractmethod
+    def calc_single_rIC_ret(self, expr: Expression) -> float:
+        'Calculate Rank IC between a single alpha and a predefined target.'
+
+    @abstractmethod
+    def calc_single_all_ret(self, expr: Expression) -> Tuple[float, float]:
+        'Calculate both IC and Rank IC between a single alpha and a predefined target.'
+
+    @abstractmethod
     def calc_mutual_IC(self, expr1: Expression, expr2: Expression) -> float:
         'Calculate IC between two alphas.'
 
@@ -45,6 +53,11 @@ class AlphaCalculator(metaclass=ABCMeta):
     def calc_pool_rIC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
         'First combine the alphas linearly,'
         'then Calculate Rank IC between the linear combination and a predefined target.'
+
+    @abstractmethod
+    def calc_pool_all_ret(self, exprs: List[Expression], weights: List[float]) -> Tuple[float, float]:
+        'First combine the alphas linearly,'
+        'then Calculate both IC and Rank IC between the linear combination and a predefined target.'
 ```
 
 Reminder: the values evaluated from different alphas may have drastically different scales, we recommend that you should normalize them before combination.

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from torch import Tensor
 import torch
 from alphagen.data.calculator import AlphaCalculator
@@ -35,6 +35,14 @@ class QLibStockDataCalculator(AlphaCalculator):
         value = self._calc_alpha(expr)
         return self._calc_IC(value, self.target_value)
 
+    def calc_single_rIC_ret(self, expr: Expression) -> float:
+        value = self._calc_alpha(expr)
+        return self._calc_rIC(value, self.target_value)
+
+    def calc_single_all_ret(self, expr: Expression) -> Tuple[float, float]:
+        value = self._calc_alpha(expr)
+        return self._calc_IC(value, self.target_value), self._calc_rIC(value, self.target_value)
+
     def calc_mutual_IC(self, expr1: Expression, expr2: Expression) -> float:
         value1, value2 = self._calc_alpha(expr1), self._calc_alpha(expr2)
         return self._calc_IC(value1, value2)
@@ -42,11 +50,14 @@ class QLibStockDataCalculator(AlphaCalculator):
     def calc_pool_IC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
         with torch.no_grad():
             ensemble_value = self.make_ensemble_alpha(exprs, weights)
-            ic = batch_pearsonr(ensemble_value, self.target_value).mean().item()
-            return ic
+            return self._calc_IC(ensemble_value, self.target_value)
 
     def calc_pool_rIC_ret(self, exprs: List[Expression], weights: List[float]) -> float:
         with torch.no_grad():
             ensemble_value = self.make_ensemble_alpha(exprs, weights)
-            rank_ic = batch_spearmanr(ensemble_value, self.target_value).mean().item()
-            return rank_ic
+            return self._calc_rIC(ensemble_value, self.target_value)
+
+    def calc_pool_all_ret(self, exprs: List[Expression], weights: List[float]) -> Tuple[float, float]:
+        with torch.no_grad():
+            ensemble_value = self.make_ensemble_alpha(exprs, weights)
+            return self._calc_IC(ensemble_value, self.target_value), self._calc_rIC(ensemble_value, self.target_value)

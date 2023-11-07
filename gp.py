@@ -11,6 +11,7 @@ from alphagen.utils.pytorch_utils import normalize_by_day
 from alphagen.utils.random import reseed_everything
 from alphagen_generic.operators import funcs as generic_funcs
 from alphagen_generic.features import *
+from alphagen_qlib.calculator import QLibStockDataCalculator
 from gplearn.fitness import make_fitness
 from gplearn.functions import make_function
 from gplearn.genetic import SymbolicRegressor
@@ -24,18 +25,17 @@ reseed_everything(seed)
 
 cache = {}
 device = torch.device('cuda:1')
-data = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
+data_train = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
 data_valid = StockData(instruments, '2019-01-01', '2019-12-31', device=device)
 data_test = StockData(instruments, '2020-01-01', '2021-12-31', device=device)
+calculator_train = QLibStockDataCalculator(data_train, target)
+calculator_valid = QLibStockDataCalculator(data_valid, target)
+calculator_test = QLibStockDataCalculator(data_test, target)
 
 pool = AlphaPool(capacity=10,
-                 stock_data=data,
-                 target=target,
-                 ic_lower_bound=None)
-
-target_factor = target.evaluate(data)
-target_factor_valid = target.evaluate(data_valid)
-target_factor_test = target.evaluate(data_test)
+                 calculator=calculator_train,
+                 ic_lower_bound=None,
+                 l1_alpha=5e-3)
 
 
 def _metric(x, y, w):
@@ -49,9 +49,7 @@ def _metric(x, y, w):
 
     expr = eval(key)
     try:
-        factor = expr.evaluate(data)
-        factor = normalize_by_day(factor)
-        ic = batch_pearsonr(factor, target_factor).mean().item()
+        ic = calculator_train.calc_single_IC_ret(expr)
     except OutOfDataRangeError:
         ic = -1.
     if np.isnan(ic):
@@ -65,19 +63,18 @@ Metric = make_fitness(function=_metric, greater_is_better=True)
 
 def try_single():
     top_key = Counter(cache).most_common(1)[0][0]
-    v_valid = eval(top_key).evaluate(data_valid)
-    v_test = eval(top_key).evaluate(data_test)
-    ic_test = batch_pearsonr(v_test, target_factor_test).mean().item()
-    ic_valid = batch_pearsonr(v_valid, target_factor_valid).mean().item()
-    ric_test = batch_spearmanr(v_test, target_factor_test).mean().item()
-    ric_valid = batch_spearmanr(v_valid, target_factor_valid).mean().item()
-    return {'ic_test': ic_test, 'ic_valid': ic_valid, 'ric_test': ric_test, 'ric_valid': ric_valid}
+    expr = eval(top_key)
+    ic_valid, ric_valid = calculator_valid.calc_single_all_ret(expr)
+    ic_test, ric_test = calculator_test.calc_single_all_ret(expr)
+    return {'ic_test': ic_test,
+            'ic_valid': ic_valid,
+            'ric_test': ric_test,
+            'ric_valid': ric_valid}
 
 
 def try_pool(capacity):
     pool = AlphaPool(capacity=capacity,
-                     stock_data=data,
-                     target=target,
+                     calculator=calculator_train,
                      ic_lower_bound=None)
 
     exprs = []
@@ -86,9 +83,12 @@ def try_pool(capacity):
     pool.force_load_exprs(exprs)
     pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
 
-    ic_test, ric_test = pool.test_ensemble(data_test, target)
-    ic_valid, ric_valid = pool.test_ensemble(data_valid, target)
-    return {'ic_test': ic_test, 'ic_valid': ic_valid, 'ric_test': ric_test, 'ric_valid': ric_valid}
+    ic_test, ric_test = pool.test_ensemble(calculator_test)
+    ic_valid, ric_valid = pool.test_ensemble(calculator_valid)
+    return {'ic_test': ic_test,
+            'ic_valid': ic_valid,
+            'ric_test': ric_test,
+            'ric_valid': ric_valid}
 
 
 generation = 0
