@@ -8,6 +8,7 @@ from alphagen.data.expression import Operators
 from alphagen.data.tokens import *
 
 
+# Deprecated!
 class TokenEmbedding(nn.Module):
     def __init__(self,
                  d_model: int,
@@ -64,6 +65,7 @@ class TokenEmbedding(nn.Module):
         return result
 
 
+# Deprecated!
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 5000):
         super().__init__()
@@ -80,6 +82,7 @@ class PositionalEncoding(nn.Module):
         return x + self._pe[:seq_len]  # type: ignore
 
 
+# Deprecated!
 class ExpressionGenerator(nn.Module):
     def __init__(self,
                  n_encoder_layers: int,
