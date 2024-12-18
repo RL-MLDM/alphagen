@@ -1,10 +1,11 @@
+from typing import Type
 from alphagen.data.expression import *
 
 
-MAX_EXPR_LENGTH = 20
+MAX_EXPR_LENGTH = 15
 MAX_EPISODE_LENGTH = 256
 
-OPERATORS = [
+OPERATORS: List[Type[Operator]] = [
     # Unary
     Abs,  # Sign,
     Log,
@@ -19,7 +20,7 @@ OPERATORS = [
     Cov, Corr
 ]
 
-DELTA_TIMES = [10, 20, 30, 40, 50]
+DELTA_TIMES = [1, 5, 10, 20, 40]
 
 CONSTANTS = [-30., -10., -5., -2., -1., -0.5, -0.01, 0.01, 0.5, 1., 2., 5., 10., 30.]
 

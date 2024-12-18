@@ -14,17 +14,32 @@ class FeatureType(IntEnum):
     VWAP = 5
 
 
+_DEFAULT_QLIB_DATA_PATH = "~/.qlib/qlib_data/cn_data"
+_QLIB_INITIALIZED = False
+
+
+def initialize_qlib(qlib_data_path: str = _DEFAULT_QLIB_DATA_PATH) -> None:
+    import qlib
+    from qlib.config import REG_CN
+    qlib.init(provider_uri=qlib_data_path, region=REG_CN)
+    global _QLIB_INITIALIZED
+    _QLIB_INITIALIZED = True
+
+
 class StockData:
     _qlib_initialized: bool = False
 
-    def __init__(self,
-                 instrument: Union[str, List[str]],
-                 start_time: str,
-                 end_time: str,
-                 max_backtrack_days: int = 100,
-                 max_future_days: int = 30,
-                 features: Optional[List[FeatureType]] = None,
-                 device: torch.device = torch.device('cuda:0')) -> None:
+    def __init__(
+        self,
+        instrument: Union[str, List[str]],
+        start_time: str,
+        end_time: str,
+        max_backtrack_days: int = 100,
+        max_future_days: int = 30,
+        features: Optional[List[FeatureType]] = None,
+        device: torch.device = torch.device("cuda:0"),
+        preloaded_data: Optional[Tuple[torch.Tensor, pd.Index, pd.Index]] = None
+    ) -> None:
         self._init_qlib()
 
         self._instrument = instrument
@@ -34,16 +49,14 @@ class StockData:
         self._end_time = end_time
         self._features = features if features is not None else list(FeatureType)
         self.device = device
-        self.data, self._dates, self._stock_ids = self._get_data()
+        data_tup = preloaded_data if preloaded_data is not None else self._get_data()
+        self.data, self._dates, self._stock_ids = data_tup
 
     @classmethod
     def _init_qlib(cls) -> None:
-        if cls._qlib_initialized:
-            return
-        import qlib
-        from qlib.config import REG_CN
-        qlib.init(provider_uri="~/.qlib/qlib_data/cn_data_rolling", region=REG_CN)
-        cls._qlib_initialized = True
+        global _QLIB_INITIALIZED
+        if not _QLIB_INITIALIZED:
+            initialize_qlib()
 
     def _load_exprs(self, exprs: Union[str, List[str]]) -> pd.DataFrame:
         # This evaluates an expression on the data and returns the dataframe
@@ -72,6 +85,51 @@ class StockData:
         values = values.reshape((-1, len(features), values.shape[-1]))  # type: ignore
         return torch.tensor(values, dtype=torch.float, device=self.device), dates, stock_ids
 
+    def __getitem__(self, slc: slice) -> "StockData":
+        "Get a subview of the data given a date slice or an index slice."
+        if slc.step is not None:
+            raise ValueError("Only support slice with step=None")
+        if isinstance(slc.start, str):
+            return self[self.find_date_slice(slc.start, slc.stop)]
+        start, stop = slc.start, slc.stop
+        start = start if start is not None else 0
+        stop = (stop if stop is not None else self.n_days) + self.max_future_days + self.max_backtrack_days
+        start = max(0, start)
+        stop = min(self.data.shape[0], stop)
+        idx_range = slice(start, stop)
+        data = self.data[idx_range]
+        remaining = data.isnan().reshape(-1, data.shape[-1]).all(dim=0).logical_not().nonzero().flatten()
+        data = data[:, :, remaining]
+        return StockData(
+            instrument=self._instrument,
+            start_time=self._dates[start + self.max_backtrack_days].strftime("%Y-%m-%d"),
+            end_time=self._dates[stop - 1 - + self.max_future_days].strftime("%Y-%m-%d"),
+            max_backtrack_days=self.max_backtrack_days,
+            max_future_days=self.max_future_days,
+            features=self._features,
+            device=self.device,
+            preloaded_data=(data, self._dates[idx_range], self._stock_ids[remaining.tolist()])
+        )
+
+    def find_date_index(self, date: str, exclusive: bool = False) -> int:
+        ts = pd.Timestamp(date)
+        idx: int = self._dates.searchsorted(ts)  # type: ignore
+        if exclusive and self._dates[idx] == ts:
+            idx += 1
+        idx -= self.max_backtrack_days
+        if idx < 0 or idx > self.n_days:
+            raise ValueError(f"Date {date} is out of range: available [{self._start_time}, {self._end_time}]")
+        return idx
+    
+    def find_date_slice(self, start_time: Optional[str] = None, end_time: Optional[str] = None) -> slice:
+        """
+        Find a slice of indices corresponding to the given date range.
+        For the input, both ends are inclusive. The output is a normal left-closed right-open slice.
+        """
+        start = None if start_time is None else self.find_date_index(start_time)
+        stop = None if end_time is None else self.find_date_index(end_time, exclusive=False)
+        return slice(start, stop)
+
     @property
     def n_features(self) -> int:
         return len(self._features)
@@ -83,6 +141,10 @@ class StockData:
     @property
     def n_days(self) -> int:
         return self.data.shape[0] - self.max_backtrack_days - self.max_future_days
+
+    @property
+    def stock_ids(self) -> pd.Index:
+        return self._stock_ids
 
     def make_dataframe(
         self,

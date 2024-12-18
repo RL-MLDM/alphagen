@@ -1,10 +1,14 @@
 from abc import ABCMeta, abstractmethod
-from typing import List, Type, Union
+from typing import List, Type, Union, Tuple
 
 import torch
 from torch import Tensor
-
+from alphagen.utils.maybe import Maybe, some, none
 from alphagen_qlib.stock_data import StockData, FeatureType
+
+
+_ExprOrFloat = Union["Expression", float]
+_DTimeOrInt = Union["DeltaTime", int]
 
 
 class OutOfDataRangeError(IndexError):
@@ -17,52 +21,23 @@ class Expression(metaclass=ABCMeta):
 
     def __repr__(self) -> str: return str(self)
 
-    def __add__(self, other: Union["Expression", float]) -> "Add":
-        if isinstance(other, Expression):
-            return Add(self, other)
-        else:
-            return Add(self, Constant(other))
-
-    def __radd__(self, other: float) -> "Add": return Add(Constant(other), self)
-
-    def __sub__(self, other: Union["Expression", float]) -> "Sub":
-        if isinstance(other, Expression):
-            return Sub(self, other)
-        else:
-            return Sub(self, Constant(other))
-
-    def __rsub__(self, other: float) -> "Sub": return Sub(Constant(other), self)
-
-    def __mul__(self, other: Union["Expression", float]) -> "Mul":
-        if isinstance(other, Expression):
-            return Mul(self, other)
-        else:
-            return Mul(self, Constant(other))
-
-    def __rmul__(self, other: float) -> "Mul": return Mul(Constant(other), self)
-
-    def __truediv__(self, other: Union["Expression", float]) -> "Div":
-        if isinstance(other, Expression):
-            return Div(self, other)
-        else:
-            return Div(self, Constant(other))
-
-    def __rtruediv__(self, other: float) -> "Div": return Div(Constant(other), self)
-
-    def __pow__(self, other: Union["Expression", float]) -> "Pow":
-        if isinstance(other, Expression):
-            return Pow(self, other)
-        else:
-            return Pow(self, Constant(other))
-
-    def __rpow__(self, other: float) -> "Pow": return Pow(Constant(other), self)
-
+    def __add__(self, other: _ExprOrFloat) -> "Add": return Add(self, other)
+    def __radd__(self, other: float) -> "Add": return Add(other, self)
+    def __sub__(self, other: _ExprOrFloat) -> "Sub": return Sub(self, other)
+    def __rsub__(self, other: float) -> "Sub": return Sub(other, self)
+    def __mul__(self, other: _ExprOrFloat) -> "Mul": return Mul(self, other)
+    def __rmul__(self, other: float) -> "Mul": return Mul(other, self)
+    def __truediv__(self, other: _ExprOrFloat) -> "Div": return Div(self, other)
+    def __rtruediv__(self, other: float) -> "Div": return Div(other, self)
+    def __pow__(self, other: _ExprOrFloat) -> "Pow": return Pow(self, other)
+    def __rpow__(self, other: float) -> "Pow": return Pow(other, self)
     def __pos__(self) -> "Expression": return self
-    def __neg__(self) -> "Sub": return Sub(Constant(0), self)
+    def __neg__(self) -> "Sub": return Sub(0., self)
     def __abs__(self) -> "Abs": return Abs(self)
 
     @property
-    def is_featured(self): raise NotImplementedError
+    @abstractmethod
+    def is_featured(self) -> bool: ...
 
 
 class Feature(Expression):
@@ -86,7 +61,7 @@ class Feature(Expression):
 
 class Constant(Expression):
     def __init__(self, value: float) -> None:
-        self._value = value
+        self.value = value
 
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         assert period.step == 1 or period.step is None
@@ -97,9 +72,9 @@ class Constant(Expression):
         dtype = data.data.dtype
         days = period.stop - period.start - 1 + data.n_days
         return torch.full(size=(days, data.n_stocks),
-                          fill_value=self._value, dtype=dtype, device=device)
+                          fill_value=self.value, dtype=dtype, device=device)
 
-    def __str__(self) -> str: return f'Constant({str(self._value)})'
+    def __str__(self) -> str: return str(self.value)
 
     @property
     def is_featured(self): return False
@@ -114,10 +89,18 @@ class DeltaTime(Expression):
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         assert False, "Should not call evaluate on delta time"
 
-    def __str__(self) -> str: return str(self._delta_time)
+    def __str__(self) -> str: return f"{self._delta_time}d"
 
     @property
     def is_featured(self): return False
+
+
+def _into_expr(value: _ExprOrFloat) -> "Expression":
+    return value if isinstance(value, Expression) else Constant(value)
+
+
+def _into_delta_time(value: Union[int, DeltaTime]) -> DeltaTime:
+    return value if isinstance(value, DeltaTime) else DeltaTime(value)
 
 
 # Operator base classes
@@ -129,18 +112,66 @@ class Operator(Expression):
 
     @classmethod
     @abstractmethod
-    def category_type(cls) -> Type['Operator']: ...
+    def category_type(cls) -> Type["Operator"]: ...
+
+    @classmethod
+    @abstractmethod
+    def validate_parameters(cls, *args) -> Maybe[str]: ...
+
+    @classmethod
+    def _check_arity(cls, *args) -> Maybe[str]:
+        arity = cls.n_args()
+        if len(args) == arity:
+            return none(str)
+        else:
+            return some(f"{cls.__name__} expects {arity} operand(s), but received {len(args)}")
+
+    @classmethod
+    def _check_exprs_featured(cls, args: list) -> Maybe[str]:
+        any_is_featured: bool = False
+        for i, arg in enumerate(args):
+            if not isinstance(arg, (Expression, float)):
+                return some(f"{arg} is not a valid expression")
+            if isinstance(arg, DeltaTime):
+                return some(f"{cls.__name__} expects a normal expression for operand {i + 1}, "
+                            f"but got {arg} (a DeltaTime)")
+            any_is_featured = any_is_featured or (isinstance(arg, Expression) and arg.is_featured)
+        if not any_is_featured:
+            if len(args) == 1:
+                return some(f"{cls.__name__} expects a featured expression for its operand, "
+                            f"but {args[0]} is not featured")
+            else:
+                return some(f"{cls.__name__} expects at least one featured expression for its operands, "
+                            f"but none of {args} is featured")
+        return none(str)
+
+    @classmethod
+    def _check_delta_time(cls, arg) -> Maybe[str]:
+        if not isinstance(arg, (DeltaTime, int)):
+            return some(f"{cls.__name__} expects a DeltaTime as its last operand, but {arg} is not")
+        return none(str)
+
+    @property
+    @abstractmethod
+    def operands(self) -> Tuple[Expression, ...]: ...
+
+    def __str__(self) -> str:
+        return f"{type(self).__name__}({','.join(str(op) for op in self.operands)})"
 
 
 class UnaryOperator(Operator):
-    def __init__(self, operand: Union[Expression, float]) -> None:
-        self._operand = operand if isinstance(operand, Expression) else Constant(operand)
+    def __init__(self, operand: _ExprOrFloat) -> None:
+        self._operand = _into_expr(operand)
 
     @classmethod
     def n_args(cls) -> int: return 1
 
     @classmethod
-    def category_type(cls) -> Type['Operator']: return UnaryOperator
+    def category_type(cls): return UnaryOperator
+
+    @classmethod
+    def validate_parameters(cls, *args) -> Maybe[str]:
+        return cls._check_arity(*args).or_else(lambda: cls._check_exprs_featured([args[0]]))
 
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         return self._apply(self._operand.evaluate(data, period))
@@ -148,23 +179,27 @@ class UnaryOperator(Operator):
     @abstractmethod
     def _apply(self, operand: Tensor) -> Tensor: ...
 
-    def __str__(self) -> str:
-        return f"{type(self).__name__}({self._operand})"
+    @property
+    def operands(self): return self._operand,
 
     @property
     def is_featured(self): return self._operand.is_featured
 
 
 class BinaryOperator(Operator):
-    def __init__(self, lhs: Union[Expression, float], rhs: Union[Expression, float]) -> None:
-        self._lhs = lhs if isinstance(lhs, Expression) else Constant(lhs)
-        self._rhs = rhs if isinstance(rhs, Expression) else Constant(rhs)
+    def __init__(self, lhs: _ExprOrFloat, rhs: _ExprOrFloat) -> None:
+        self._lhs = _into_expr(lhs)
+        self._rhs = _into_expr(rhs)
 
     @classmethod
     def n_args(cls) -> int: return 2
 
     @classmethod
-    def category_type(cls) -> Type['Operator']: return BinaryOperator
+    def category_type(cls): return BinaryOperator
+
+    @classmethod
+    def validate_parameters(cls, *args) -> Maybe[str]:
+        return cls._check_arity(*args).or_else(lambda: cls._check_exprs_featured([args[0], args[1]]))
 
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         return self._apply(self._lhs.evaluate(data, period), self._rhs.evaluate(data, period))
@@ -172,25 +207,33 @@ class BinaryOperator(Operator):
     @abstractmethod
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: ...
 
-    def __str__(self) -> str:
-        return f"{type(self).__name__}({self._lhs},{self._rhs})"
+    def __str__(self) -> str: return f"{type(self).__name__}({self._lhs},{self._rhs})"
+
+    @property
+    def operands(self): return self._lhs, self._rhs
 
     @property
     def is_featured(self): return self._lhs.is_featured or self._rhs.is_featured
 
 
 class RollingOperator(Operator):
-    def __init__(self, operand: Union[Expression, float], delta_time: Union[int, DeltaTime]) -> None:
-        self._operand = operand if isinstance(operand, Expression) else Constant(operand)
-        if isinstance(delta_time, DeltaTime):
-            delta_time = delta_time._delta_time
-        self._delta_time = delta_time
+    def __init__(self, operand: _ExprOrFloat, delta_time: _DTimeOrInt) -> None:
+        self._operand = _into_expr(operand)
+        self._delta_time = _into_delta_time(delta_time)._delta_time
 
     @classmethod
     def n_args(cls) -> int: return 2
 
     @classmethod
-    def category_type(cls) -> Type['Operator']: return RollingOperator
+    def category_type(cls): return RollingOperator
+
+    @classmethod
+    def validate_parameters(cls, *args) -> Maybe[str]:
+        return cls._check_arity(*args).or_else(
+            lambda: cls._check_exprs_featured([args[0]])
+        ).or_else(
+            lambda: cls._check_delta_time(args[1])
+        )
 
     def evaluate(self, data: StockData, period: slice = slice(0, 1)) -> Tensor:
         start = period.start - self._delta_time + 1
@@ -205,28 +248,32 @@ class RollingOperator(Operator):
     @abstractmethod
     def _apply(self, operand: Tensor) -> Tensor: ...
 
-    def __str__(self) -> str:
-        return f"{type(self).__name__}({self._operand},{self._delta_time})"
+    @property
+    def operands(self): return self._operand, DeltaTime(self._delta_time)
 
     @property
     def is_featured(self): return self._operand.is_featured
 
 
 class PairRollingOperator(Operator):
-    def __init__(self,
-                 lhs: Expression, rhs: Expression,
-                 delta_time: Union[int, DeltaTime]) -> None:
-        self._lhs = lhs if isinstance(lhs, Expression) else Constant(lhs)
-        self._rhs = rhs if isinstance(rhs, Expression) else Constant(rhs)
-        if isinstance(delta_time, DeltaTime):
-            delta_time = delta_time._delta_time
-        self._delta_time = delta_time
+    def __init__(self, lhs: _ExprOrFloat, rhs: _ExprOrFloat, delta_time: _DTimeOrInt) -> None:
+        self._lhs = _into_expr(lhs)
+        self._rhs = _into_expr(rhs)
+        self._delta_time = _into_delta_time(delta_time)._delta_time
 
     @classmethod
     def n_args(cls) -> int: return 3
 
     @classmethod
-    def category_type(cls) -> Type['Operator']: return PairRollingOperator
+    def category_type(cls): return PairRollingOperator
+
+    @classmethod
+    def validate_parameters(cls, *args) -> Maybe[str]:
+        return cls._check_arity(*args).or_else(
+            lambda: cls._check_exprs_featured([args[0], args[1]])
+        ).or_else(
+            lambda: cls._check_delta_time(args[2])
+        )
 
     def _unfold_one(self, expr: Expression,
                     data: StockData, period: slice = slice(0, 1)) -> Tensor:
@@ -246,8 +293,8 @@ class PairRollingOperator(Operator):
     @abstractmethod
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: ...
 
-    def __str__(self) -> str:
-        return f"{type(self).__name__}({self._lhs},{self._rhs},{self._delta_time})"
+    @property
+    def operands(self): return self._lhs, self._rhs, DeltaTime(self._delta_time)
 
     @property
     def is_featured(self): return self._lhs.is_featured or self._rhs.is_featured
@@ -299,17 +346,9 @@ class Pow(BinaryOperator):
 class Greater(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs.max(rhs)
 
-    @property
-    def is_featured(self):
-        return self._lhs.is_featured and self._rhs.is_featured
-
 
 class Less(BinaryOperator):
     def _apply(self, lhs: Tensor, rhs: Tensor) -> Tensor: return lhs.min(rhs)
-
-    @property
-    def is_featured(self):
-        return self._lhs.is_featured and self._rhs.is_featured
 
 
 class Ref(RollingOperator):
@@ -445,8 +484,7 @@ class Corr(PairRollingOperator):
         return ncov / stdmul
 
 
-# Deprecated!
-Operators: List[Type[Expression]] = [
+Operators: List[Type[Operator]] = [
     # Unary
     Abs, Sign, Log, CSRank,
     # Binary

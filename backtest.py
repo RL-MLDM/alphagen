@@ -1,16 +1,24 @@
-from typing import Optional, TypeVar, Callable, Optional
+from typing import Optional, TypeVar, Callable, Optional, Tuple
 import os
 import pickle
 import warnings
 import pandas as pd
+import json
+from pathlib import Path
+from dataclasses import dataclass
+from dataclasses_json import DataClassJsonMixin
+
 from qlib.backtest import backtest, executor as exec
 from qlib.contrib.evaluate import risk_analysis
 from qlib.contrib.report.analysis_position import report_graph
-from alphagen.data.expression import *
+from qlib.contrib.strategy import TopkDropoutStrategy
 
-from alphagen_qlib.stock_data import StockData
+from alphagen.data.expression import *
+from alphagen.data.parser import parse_expression
 from alphagen_generic.features import *
-from alphagen_qlib.strategy import TopKSwapNStrategy
+from alphagen_qlib.stock_data import StockData, initialize_qlib
+from alphagen_qlib.calculator import QLibStockDataCalculator
+from alphagen_qlib.utils import load_alpha_pool_by_path
 
 
 _T = TypeVar("_T")
@@ -39,7 +47,8 @@ def dump_pickle(path: str,
         return obj
 
 
-class BacktestResult(dict):
+@dataclass
+class BacktestResult(DataClassJsonMixin):
     sharpe: float
     annual_return: float
     max_drawdown: float
@@ -52,7 +61,7 @@ class QlibBacktest:
     def __init__(
         self,
         benchmark: str = "SH000300",
-        top_k: int = 30,
+        top_k: int = 50,
         n_drop: Optional[int] = None,
         deal: str = "close",
         open_cost: float = 0.0015,
@@ -69,10 +78,9 @@ class QlibBacktest:
 
     def run(
         self,
-        prediction: pd.Series,
-        output_prefix: Optional[str] = None,
-        return_report: bool = False
-    ) -> BacktestResult:
+        prediction: Union[pd.Series, pd.DataFrame],
+        output_prefix: Optional[str] = None
+    ) -> Tuple[pd.DataFrame, BacktestResult]:
         prediction = prediction.sort_index()
         index: pd.MultiIndex = prediction.index.remove_unused_levels()  # type: ignore
         dates = index.levels[0]
@@ -80,14 +88,14 @@ class QlibBacktest:
         def backtest_impl(last: int = -1):
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                strategy=TopKSwapNStrategy(
-                    K=self._top_k,
-                    n_swap=self._n_drop,
+                strategy = TopkDropoutStrategy(
                     signal=prediction,
-                    min_hold_days=1,
+                    topk=self._top_k,
+                    n_drop=self._n_drop,
                     only_tradable=True,
+                    forbid_all_trade_at_limit=True
                 )
-                executor=exec.SimulatorExecutor(
+                executor = exec.SimulatorExecutor(
                     time_per_step="day",
                     generate_portfolio_metrics=True
                 )
@@ -119,11 +127,8 @@ class QlibBacktest:
         if output_prefix is not None:
             dump_pickle(output_prefix + "-report.pkl", lambda: report, True)
             dump_pickle(output_prefix + "-graph.pkl", lambda: graph, True)
-            write_all_text(output_prefix + "-result.json", result)
-
-        print(report)
-        print(result)
-        return report if return_report else result
+            write_all_text(output_prefix + "-result.json", result.to_json())
+        return report, result
 
     def _analyze_report(self, report: pd.DataFrame) -> BacktestResult:
         excess = risk_analysis(report["return"] - report["bench"] - report["cost"])["risk"]
@@ -143,12 +148,38 @@ class QlibBacktest:
 
 
 if __name__ == "__main__":
-    qlib_backtest = QlibBacktest()
+    initialize_qlib("~/.qlib/qlib_data/cn_data")
+    qlib_backtest = QlibBacktest(top_k=50, n_drop=5)
+    data = StockData(
+        instrument="csi300",
+        start_time="2022-01-01",
+        end_time="2023-06-30"
+    )
+    calc = QLibStockDataCalculator(data, None)
 
-    data = StockData(instrument='csi300',
-                     start_time='2020-01-01',
-                     end_time='2021-12-31')
-    expr = Mul(EMA(Sub(Delta(Mul(Log(open_),Constant(-30.0)),50),Constant(-0.01)),40),Mul(Div(Abs(EMA(low,50)),close),Constant(0.01)))
-    data_df = data.make_dataframe(expr.evaluate(data))
+    def run_backtest(prefix: str, seed: int, exprs: List[Expression], weights: List[float]):
+        df = data.make_dataframe(calc.make_ensemble_alpha(exprs, weights))
+        qlib_backtest.run(df, output_prefix=f"out/backtests/50-5/{prefix}/{seed}")
 
-    qlib_backtest.run(data_df)
+    for p in Path("out/gp").iterdir():
+        seed = int(p.name)
+        with open(p / "40.json") as f:
+            report = json.load(f)
+        state = report["res"]["res"]["pool_state"]
+        run_backtest("gp", seed, [parse_expression(e) for e in state["exprs"]], state["weights"])
+    exit(0)
+    for p in Path("out/results").iterdir():
+        inst, size, seed, time, ver = p.name.split('_', 4)
+        size, seed = int(size), int(seed)
+        if inst != "csi300" or size != 20 or time < "20240923" or ver == "llm_d5":
+            continue
+        exprs, weights = load_alpha_pool_by_path(str(p / "251904_steps_pool.json"))
+        run_backtest(ver, seed, exprs, weights)
+    for p in Path("out/llm-tests/interaction").iterdir():
+        if not p.name.startswith("v1"):
+            continue
+        run = int(p.name[3])
+        with open(p / "report.json") as f:
+            report = json.load(f)
+        state = report[-1]["pool_state"]
+        run_backtest("pure_llm", run, [parse_expression(t[0]) for t in state], [t[1] for t in state])

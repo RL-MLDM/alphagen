@@ -5,7 +5,7 @@ from alphagen_qlib.calculator import QLibStockDataCalculator
 from dso import DeepSymbolicRegressor
 from dso.library import Token, HardCodedConstant
 from dso import functions
-from alphagen.models.alpha_pool import AlphaPool
+from alphagen.models.linear_alpha_pool import MseAlphaPool
 from alphagen.utils import reseed_everything
 from alphagen_generic.operators import funcs as generic_funcs
 from alphagen_generic.features import *
@@ -39,14 +39,16 @@ if __name__ == '__main__':
     y = np.array([[1]])
     functions.function_map = funcs
 
-    pool = AlphaPool(capacity=10,
-                     calculator=calculator_train,
-                     ic_lower_bound=None)
+    pool = MseAlphaPool(
+        capacity=10,
+        calculator=calculator_train,
+        ic_lower_bound=None
+    )
 
     class Ev:
         def __init__(self, pool):
             self.cnt = 0
-            self.pool = pool
+            self.pool: MseAlphaPool = pool
             self.results = {}
 
         def alpha_ev_fn(self, key):
@@ -64,7 +66,6 @@ if __name__ == '__main__':
                 return ret
 
     ev = Ev(pool)
-
 
     config = dict(
         task=dict(

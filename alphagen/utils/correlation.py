@@ -14,13 +14,20 @@ def _mask_either_nan(x: Tensor, y: Tensor, fill_with: float = torch.nan):
     return x, y, n, nan_mask
 
 
+def _rank_data_1d(x: Tensor) -> Tensor:
+    _, inv, counts = x.unique(return_inverse=True, return_counts=True)
+    cs = counts.cumsum(dim=0)
+    cs = torch.cat((torch.zeros(1, dtype=x.dtype, device=x.device), cs))
+    rmin = cs[:-1]
+    rmax = cs[1:] - 1
+    ranks = (rmin + rmax) / 2
+    return ranks[inv]
+
+
 def _rank_data(x: Tensor, nan_mask: Tensor) -> Tensor:
-    rank = x.argsort().argsort().float()            # [d, s]
-    eq = x[:, None] == x[:, :, None]                # [d, s, s]
-    eq = eq / eq.sum(dim=2, keepdim=True)           # [d, s, s]
-    rank = (eq @ rank[:, :, None]).squeeze(dim=2)
+    rank = torch.stack([_rank_data_1d(row) for row in x])
     rank[nan_mask] = 0
-    return rank                                     # [d, s]
+    return rank  # [d, s]
 
 
 def _batch_pearsonr_given_mask(

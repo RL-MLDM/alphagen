@@ -6,7 +6,8 @@ from alphagen.config import MAX_EXPR_LENGTH
 from alphagen.data.tokens import *
 from alphagen.data.expression import *
 from alphagen.data.tree import ExpressionBuilder
-from alphagen.models.alpha_pool import AlphaPoolBase, AlphaPool
+from alphagen.models.alpha_pool import AlphaPoolBase
+from alphagen.models.linear_alpha_pool import LinearAlphaPool
 from alphagen.utils import reseed_everything
 
 
@@ -16,11 +17,12 @@ class AlphaEnvCore(gym.Env):
     _builder: ExpressionBuilder
     _print_expr: bool
 
-    def __init__(self,
-                 pool: AlphaPoolBase,
-                 device: torch.device = torch.device('cuda:0'),
-                 print_expr: bool = False
-                 ):
+    def __init__(
+        self,
+        pool: AlphaPoolBase,
+        device: torch.device = torch.device('cuda:0'),
+        print_expr: bool = False
+    ):
         super().__init__()
 
         self.pool = pool
@@ -30,6 +32,7 @@ class AlphaEnvCore(gym.Env):
         self.eval_cnt = 0
 
         self.render_mode = None
+        self.reset()
 
     def reset(
         self, *,
@@ -59,8 +62,7 @@ class AlphaEnvCore(gym.Env):
         if math.isnan(reward):
             reward = 0.
 
-        truncated = False  # Fk gymnasium
-        return self._tokens, reward, done, truncated, self._valid_action_types()
+        return self._tokens, reward, done, False, self._valid_action_types()
 
     def _evaluate(self):
         expr: Expression = self._builder.get_tree()
@@ -82,7 +84,7 @@ class AlphaEnvCore(gym.Env):
         valid_op = valid_op_unary or valid_op_binary or valid_op_rolling or valid_op_pair_rolling
         valid_dt = self._builder.validate_dt()
         valid_const = self._builder.validate_const()
-        valid_feature = self._builder.validate_feature()
+        valid_feature = self._builder.validate_featured_expr()
         valid_stop = self._builder.is_valid()
 
         ret = {

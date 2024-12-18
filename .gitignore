@@ -2,11 +2,12 @@ __pycache__
 .idea/
 .vscode/
 .DS_STORE
-playground.ipynb
-playground.py
-^data/
-out/
+playground*.ipynb
+playground*.py
+/data/
+/out/
 logs/
 tb_logs/
 get_baostock_data.ipynb
 get_baostock_data.py
+/utils/

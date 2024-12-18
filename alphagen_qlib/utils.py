@@ -5,6 +5,7 @@ from alphagen.data.expression import *
 from alphagen_generic.features import *
 
 from alphagen_qlib.stock_data import StockData
+from alphagen.data.parser import ExpressionParser
 
 
 def load_recent_data(instrument: str,
@@ -23,13 +24,13 @@ def load_recent_data(instrument: str,
 
 
 def load_alpha_pool(raw) -> Tuple[List[Expression], List[float]]:
-    exprs_raw = raw['exprs']
-    exprs = [eval(expr_raw.replace('$open', 'open_').replace('$', '')) for expr_raw in exprs_raw]
-    weights = raw['weights']
+    parser = ExpressionParser(Operators)
+    exprs = [parser.parse(e) for e in raw["exprs"]]
+    weights = raw["weights"]
     return exprs, weights
 
 
 def load_alpha_pool_by_path(path: str) -> Tuple[List[Expression], List[float]]:
-    with open(path, encoding='utf-8') as f:
+    with open(path, encoding="utf-8") as f:
         raw = json.load(f)
         return load_alpha_pool(raw)

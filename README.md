@@ -6,13 +6,20 @@
 
 Automatic formulaic alpha generation with reinforcement learning.
 
-Paper *Generating Synergistic Formulaic Alpha Collections via Reinforcement Learning* accepted by [KDD 2023](https://kdd.org/kdd2023/), Applied Data Science (ADS) track.
+This repository contains the code for our paper *Generating Synergistic Formulaic Alpha Collections via Reinforcement Learning* accepted by [KDD 2023](https://kdd.org/kdd2023/), Applied Data Science (ADS) track, publically available on [ACM DL](https://dl.acm.org/doi/10.1145/3580305.3599831). Some extensions upon this work are also included in this repo.
 
-Paper available on [ACM DL](https://dl.acm.org/doi/10.1145/3580305.3599831) or [arXiv](https://arxiv.org/abs/2306.12964).
+## Repository Structure
 
-## How to reproduce?
+- `/alphagen` contains the basic data structures and the essential modules for starting an alpha mining pipeline;
+- `/alphagen_qlib` contains the qlib-specific APIs for data preparation;
+- `/alphagen_generic` contains data structures and utils designed for our baselines, which basically follow [gplearn](https://github.com/trevorstephens/gplearn) APIs, but with modifications for quant pipeline;
+- `/alphagen_llm` contains LLM client abstractions and a set of prompts useful for LLM-based alpha generation, and also provides some LLM-based automatic iterative alpha-generation routines.
+- `/gplearn` and `/dso` contains modified versions of our baselines;
+- `/scripts` contains several scripts for running the experiments.
 
-Note that you can either use our builtin alpha calculation pipeline(see Choice 1), or implement an adapter to your own pipeline(see Choice 2).
+## Result Reproduction
+
+Note that you can either use our builtin alpha calculation pipeline (see Choice 1), or implement an adapter to your own pipeline (see Choice 2).
 
 ### Choice 1: Stock data preparation
 
@@ -80,13 +87,14 @@ These parameters will define a RL run:
 - save_path (Path for checkpoints)
 - tensorboard_log (Path for TensorBoard)
 
-### Run!
+### Run the experiments
 
-```shell
-python train_maskable_ppo.py --seed=SEED --pool=POOL_CAPACITY --code=INSTRUMENTS --step=NUM_STEPS
-```
+Please run the individual scripts at the root directory of this project as modules, i.e. `python -m scripts.NAME ARGS...`.
+Use `python -m scripts.NAME -h` for information on the arguments.
 
-Where `SEED` is random seed, e.g., `1` or `1,2`, `POOL_CAPACITY` is the size of combination model and, `NUM_STEPS` is the limit of RL steps.
+- `scripts/rl.py`: Main experiments of AlphaGen/HARLA
+- `scripts/llm_only.py`: Alpha generator based solely on iterative interactions with an LLM.
+- `scripts/llm_test_validity.py`: Tests on how the system prompt affects the valid alpha rate of an LLM.
 
 ### After running
 
@@ -104,13 +112,6 @@ Where `SEED` is random seed, e.g., `1` or `1,2`, `POOL_CAPACITY` is the size of 
 ### Deep Symbolic Regression
 
 [DSO](https://github.com/brendenpetersen/deep-symbolic-optimization) is a mature deep learning framework for symbolic optimization tasks. We maintained a minimal version of DSO to make it compatiable with our task. The corresponding experiment scipt is [dso.py](dso.py)
-
-## Repository Structure
-
-- `/alphagen` contains the basic data structures and the essential modules for starting an alpha mining pipeline;
-- `/alphagen_qlib` contains the qlib-specific APIs for data preparation;
-- `/alphagen_generic` contains data structures and utils designed for our baselines, which basically follow [gplearn](https://github.com/trevorstephens/gplearn) APIs, but with modifications for quant pipeline;
-- `/gplearn` and `/dso` contains modified versions of our baselines.
 
 ## Trading (Experimental)
 
@@ -147,4 +148,4 @@ Thanks to the following contributors:
 
 Thanks to the following in-depth research on our project:
 
-- *因子选股系列之九十五:DFQ强化学习因子组合挖掘系统*
+- *因子选股系列之九十五: DFQ强化学习因子组合挖掘系统*

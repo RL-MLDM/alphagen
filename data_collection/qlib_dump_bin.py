@@ -5,7 +5,7 @@ import abc
 import shutil
 import traceback
 from pathlib import Path
-from typing import Iterable, List, Union, Optional
+from typing import Iterable, List, Union, Optional, Tuple
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor, as_completed, ProcessPoolExecutor
 
@@ -34,7 +34,7 @@ class DumpDataBase:
 
     def __init__(
         self,
-        csv_path: str,
+        csv_path: Union[str, Path],
         qlib_dir: str,
         backup_dir: Optional[str] = None,
         freq: str = "day",
@@ -42,8 +42,8 @@ class DumpDataBase:
         date_field_name: str = "date",
         file_suffix: str = ".csv",
         symbol_field_name: str = "symbol",
-        exclude_fields: str = "",
-        include_fields: str = "",
+        exclude_fields: Union[str, Tuple[str, ...]] = "",
+        include_fields: Union[str, Tuple[str, ...]] = "",
         limit_nums: Optional[int] = None,
     ):
         """
@@ -75,9 +75,9 @@ class DumpDataBase:
         """
         csv_path = Path(csv_path).expanduser()
         if isinstance(exclude_fields, str):
-            exclude_fields = exclude_fields.split(",")
+            exclude_fields = tuple(exclude_fields.split(","))
         if isinstance(include_fields, str):
-            include_fields = include_fields.split(",")
+            include_fields = tuple(include_fields.split(","))
         self._exclude_fields = tuple(filter(lambda x: len(x) > 0, map(str.strip, exclude_fields)))
         self._include_fields = tuple(filter(lambda x: len(x) > 0, map(str.strip, include_fields)))
         self.file_suffix = file_suffix
@@ -108,12 +108,12 @@ class DumpDataBase:
     def _backup_qlib_dir(self, target_dir: Path):
         shutil.copytree(str(self.qlib_dir.resolve()), str(target_dir.resolve()))
 
-    def _format_datetime(self, datetime_d: [str, pd.Timestamp]):
+    def _format_datetime(self, datetime_d: Union[str, pd.Timestamp]):
         datetime_d = pd.Timestamp(datetime_d)
         return datetime_d.strftime(self.calendar_format)
 
     def _get_date(
-        self, file_or_df: [Path, pd.DataFrame], *, is_begin_end: bool = False, as_set: bool = False
+        self, file_or_df: Union[Path, pd.DataFrame], *, is_begin_end: bool = False, as_set: bool = False
     ) -> Iterable[pd.Timestamp]:
         if not isinstance(file_or_df, pd.DataFrame):
             df = self._get_source_data(file_or_df)
@@ -125,7 +125,7 @@ class DumpDataBase:
             _calendars = df[self.date_field_name]
 
         if is_begin_end and as_set:
-            return (_calendars.min(), _calendars.max()), set(_calendars)
+            return (_calendars.min(), _calendars.max()), set(_calendars)    # type: ignore
         elif is_begin_end:
             return _calendars.min(), _calendars.max()
         elif as_set:
@@ -135,8 +135,7 @@ class DumpDataBase:
 
     def _get_source_data(self, file_path: Path) -> pd.DataFrame:
         df = pd.read_csv(str(file_path.resolve()), low_memory=False)
-        df[self.date_field_name] = df[self.date_field_name].astype(str).astype(np.datetime64)
-        # df.drop_duplicates([self.date_field_name], inplace=True)
+        df[self.date_field_name] = df[self.date_field_name].astype(str).astype("datetime64[ns]")
         return df
 
     def get_symbol_from_file(self, file_path: Path) -> str:
@@ -195,7 +194,7 @@ class DumpDataBase:
     def data_merge_calendar(self, df: pd.DataFrame, calendars_list: List[pd.Timestamp]) -> pd.DataFrame:
         # calendars
         calendars_df = pd.DataFrame(data=calendars_list, columns=[self.date_field_name])
-        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype(np.datetime64)
+        calendars_df[self.date_field_name] = calendars_df[self.date_field_name].astype("datetime64[ns]")
         cal_df = calendars_df[
             (calendars_df[self.date_field_name] >= df[self.date_field_name].min())
             & (calendars_df[self.date_field_name] <= df[self.date_field_name].max())
@@ -233,7 +232,7 @@ class DumpDataBase:
                 # append; self._mode == self.ALL_MODE or not bin_path.exists()
                 np.hstack([date_index, _df[field]]).astype("<f").tofile(str(bin_path.resolve()))
 
-    def _dump_bin(self, file_or_data: [Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
+    def _dump_bin(self, file_or_data: Union[Path, pd.DataFrame], calendar_list: List[pd.Timestamp]):
         if not calendar_list:
             logger.warning("calendar_list is empty")
             return
@@ -360,7 +359,7 @@ class DumpDataUpdate(DumpDataBase):
         self,
         csv_path: str,
         qlib_dir: str,
-        backup_dir: str = None,
+        backup_dir: Optional[str] = None,
         freq: str = "day",
         max_workers: int = 16,
         date_field_name: str = "date",
@@ -368,7 +367,7 @@ class DumpDataUpdate(DumpDataBase):
         symbol_field_name: str = "symbol",
         exclude_fields: str = "",
         include_fields: str = "",
-        limit_nums: int = None,
+        limit_nums: Optional[int] = None,
     ):
         """
 

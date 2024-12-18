@@ -1,17 +1,17 @@
 import json
 import os
 from collections import Counter
+from typing import Optional
 
 import numpy as np
 
 from alphagen.data.expression import *
-from alphagen.models.alpha_pool import AlphaPool
-from alphagen.utils.correlation import batch_pearsonr, batch_spearmanr
-from alphagen.utils.pytorch_utils import normalize_by_day
+from alphagen.models.linear_alpha_pool import MseAlphaPool
 from alphagen.utils.random import reseed_everything
 from alphagen_generic.operators import funcs as generic_funcs
 from alphagen_generic.features import *
 from alphagen_qlib.calculator import QLibStockDataCalculator
+from alphagen_qlib.stock_data import initialize_qlib
 from gplearn.fitness import make_fitness
 from gplearn.functions import make_function
 from gplearn.genetic import SymbolicRegressor
@@ -20,22 +20,24 @@ from gplearn.genetic import SymbolicRegressor
 funcs = [make_function(**func._asdict()) for func in generic_funcs]
 
 instruments = 'csi300'
-seed = 4
+seed = 2
 reseed_everything(seed)
 
 cache = {}
-device = torch.device('cuda:1')
-data_train = StockData(instruments, '2009-01-01', '2018-12-31', device=device)
-data_valid = StockData(instruments, '2019-01-01', '2019-12-31', device=device)
-data_test = StockData(instruments, '2020-01-01', '2021-12-31', device=device)
+device = torch.device("cuda:0")
+initialize_qlib("~/.qlib/qlib_data/cn_data_2024h1")
+data_train = StockData(instruments, "2012-01-01", "2021-12-31", device=device)
+data_test = StockData(instruments, "2022-01-01", "2023-06-30", device=device)
 calculator_train = QLibStockDataCalculator(data_train, target)
-calculator_valid = QLibStockDataCalculator(data_valid, target)
 calculator_test = QLibStockDataCalculator(data_test, target)
 
-pool = AlphaPool(capacity=10,
-                 calculator=calculator_train,
-                 ic_lower_bound=None,
-                 l1_alpha=5e-3)
+pool = MseAlphaPool(
+    capacity=20,
+    calculator=calculator_train,
+    ic_lower_bound=None,
+    l1_alpha=5e-3,
+    device=device
+)
 
 
 def _metric(x, y, w):
@@ -64,31 +66,44 @@ Metric = make_fitness(function=_metric, greater_is_better=True)
 def try_single():
     top_key = Counter(cache).most_common(1)[0][0]
     expr = eval(top_key)
-    ic_valid, ric_valid = calculator_valid.calc_single_all_ret(expr)
     ic_test, ric_test = calculator_test.calc_single_all_ret(expr)
-    return {'ic_test': ic_test,
-            'ic_valid': ic_valid,
-            'ric_test': ric_test,
-            'ric_valid': ric_valid}
+    return {
+        'ic_test': ic_test,
+        'ric_test': ric_test
+    }
 
 
-def try_pool(capacity):
-    pool = AlphaPool(capacity=capacity,
-                     calculator=calculator_train,
-                     ic_lower_bound=None)
-
+def try_pool(capacity: int, mutual_ic_thres: Optional[float] = None):
+    pool = MseAlphaPool(
+        capacity=capacity,
+        calculator=calculator_train,
+        ic_lower_bound=None
+    )
     exprs = []
-    for key in dict(Counter(cache).most_common(capacity)):
-        exprs.append(eval(key))
-    pool.force_load_exprs(exprs)
-    pool._optimize(alpha=5e-3, lr=5e-4, n_iter=2000)
 
+    def acceptable(expr: str) -> bool:
+        if mutual_ic_thres is None:
+            return True
+        return all(abs(pool.calculator.calc_mutual_IC(e, eval(expr))) <= mutual_ic_thres
+                   for e in exprs)
+
+    most_common = dict(Counter(cache).most_common(capacity if mutual_ic_thres is None else None))
+    for key in most_common:
+        if acceptable(key):
+            exprs.append(eval(key))
+            if len(exprs) >= capacity:
+                break
+    pool.force_load_exprs(exprs)
+
+    ic_train, ric_train = pool.test_ensemble(calculator_train)
     ic_test, ric_test = pool.test_ensemble(calculator_test)
-    ic_valid, ric_valid = pool.test_ensemble(calculator_valid)
-    return {'ic_test': ic_test,
-            'ic_valid': ic_valid,
-            'ric_test': ric_test,
-            'ric_valid': ric_valid}
+    return {
+        "ic_train": ic_train,
+        "ric_train": ric_train,
+        "ic_test": ic_test,
+        "ric_test": ric_test,
+        "pool_state": pool.to_json_dict()
+    }
 
 
 generation = 0
@@ -96,16 +111,14 @@ generation = 0
 def ev():
     global generation
     generation += 1
-    res = (
-        [{'pool': 0, 'res': try_single()}] +
-        [{'pool': cap, 'res': try_pool(cap)} for cap in (10, 20, 50, 100)]
-    )
-    print(res)
-    dir_ = '/path/to/save/results'
-    os.makedirs(dir_, exist_ok=True)
-    if generation % 2 == 0:
-        with open(f'{dir_}/{generation}.json', 'w') as f:
-            json.dump({'cache': cache, 'res': res}, f)
+    directory = f"out/gp/{seed}"
+    os.makedirs(directory, exist_ok=True)
+    if generation % 4 != 0:
+        return
+    capacity = 20
+    res = {"pool": capacity, "res": try_pool(capacity, mutual_ic_thres=0.7)}
+    with open(f'{directory}/{generation}.json', 'w') as f:
+        json.dump({'res': res, 'cache': cache}, f, indent=4)
 
 
 if __name__ == '__main__':
@@ -116,23 +129,25 @@ if __name__ == '__main__':
     X_train = np.array([terminals])
     y_train = np.array([[1]])
 
-    est_gp = SymbolicRegressor(population_size=1000,
-                               generations=40,
-                               init_depth=(2, 6),
-                               tournament_size=600,
-                               stopping_criteria=1.,
-                               p_crossover=0.3,
-                               p_subtree_mutation=0.1,
-                               p_hoist_mutation=0.01,
-                               p_point_mutation=0.1,
-                               p_point_replace=0.6,
-                               max_samples=0.9,
-                               verbose=1,
-                               parsimony_coefficient=0.,
-                               random_state=seed,
-                               function_set=funcs,
-                               metric=Metric,
-                               const_range=None,
-                               n_jobs=1)
+    est_gp = SymbolicRegressor(
+        population_size=1000,
+        generations=40,
+        init_depth=(2, 6),
+        tournament_size=600,
+        stopping_criteria=1.,
+        p_crossover=0.3,
+        p_subtree_mutation=0.1,
+        p_hoist_mutation=0.01,
+        p_point_mutation=0.1,
+        p_point_replace=0.6,
+        max_samples=0.9,
+        verbose=1,
+        parsimony_coefficient=0.,
+        random_state=seed,
+        function_set=funcs,
+        metric=Metric,  # type: ignore
+        const_range=None,
+        n_jobs=1
+    )
     est_gp.fit(X_train, y_train, callback=ev)
     print(est_gp._program.execute(X_train))

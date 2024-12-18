@@ -9,3 +9,5 @@ stable_baselines3==2.0.0
 torch==2.0.1
 shimmy==1.1.0
 fire
+openai==1.2.3
+num2words
